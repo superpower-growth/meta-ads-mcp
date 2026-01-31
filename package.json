@@ -1,0 +1,13 @@
+{
+  "name": "meta-ads-mcp",
+  "version": "0.1.0",
+  "description": "Remote MCP server for Meta Marketing API analytics",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["mcp", "meta", "facebook", "ads", "marketing"],
+  "author": "",
+  "license": "MIT"
+}
