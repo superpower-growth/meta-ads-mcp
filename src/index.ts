@@ -22,6 +22,7 @@ import { getSessionConfig } from './auth/session.js';
 import { requireAuth, requireAuthForToolCall } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/device.js';
+import oauthRoutes from './routes/oauth.js';
 import { DeviceCodeStore, AccessTokenStore } from './auth/device-flow.js';
 import { TokenCleanupService } from './lib/token-cleanup.js';
 import { tools } from './tools/index.js';
@@ -222,6 +223,9 @@ async function main() {
       timestamp: new Date().toISOString(),
     });
   });
+
+  // OAuth 2.0 Dynamic Client Registration
+  app.use(oauthRoutes);
 
   // Auth routes
   app.use('/auth', authRoutes);
