@@ -113,7 +113,10 @@ export class MetricsService {
    * Returns array of insight objects with requested metrics.
    *
    * @param fields - Array of metric field names to retrieve (e.g., ['impressions', 'clicks', 'spend'])
-   * @param params - Query parameters (date_preset, level, time_increment, limit)
+   * @param params - Query parameters (date_preset, level, time_increment, limit, breakdowns)
+   * @param params.breakdowns - Optional array of breakdown dimensions (e.g., ['age', 'gender'])
+   *                            WARNING: Breakdowns multiply result rows. age × gender = many rows per entity.
+   *                            Common breakdowns: 'age', 'gender', 'country', 'region', 'device_platform', 'publisher_platform'
    * @returns Promise resolving to array of insight objects
    * @throws Error if Meta API call fails with formatted error message
    *
@@ -127,6 +130,19 @@ export class MetricsService {
    *     time_increment: 1
    *   }
    * );
+   * ```
+   *
+   * @example With breakdowns:
+   * ```typescript
+   * const insights = await service.getAccountInsights(
+   *   ['impressions', 'video_p100_watched_actions'],
+   *   {
+   *     date_preset: 'last_7d',
+   *     level: 'ad',
+   *     breakdowns: ['age', 'gender']
+   *   }
+   * );
+   * // Returns multiple rows per ad (one per age-gender combination)
    * ```
    *
    * IMPORTANT: Do not use deprecated attribution windows (action_attribution_windows).
@@ -160,7 +176,10 @@ export class MetricsService {
    * Aggregates results from all pages into a single array.
    *
    * @param fields - Array of metric field names to retrieve
-   * @param params - Query parameters (date_preset, level, time_increment, limit)
+   * @param params - Query parameters (date_preset, level, time_increment, limit, breakdowns)
+   * @param params.breakdowns - Optional array of breakdown dimensions (e.g., ['age', 'gender'])
+   *                            WARNING: Breakdowns multiply result rows. age × gender = many rows per entity.
+   *                            Common breakdowns: 'age', 'gender', 'country', 'region', 'device_platform', 'publisher_platform'
    * @returns Promise resolving to complete array of all insight objects across all pages
    * @throws Error if any page fails with page number context
    *
@@ -175,6 +194,20 @@ export class MetricsService {
    *     limit: 100  // Increase page size to reduce pagination rounds
    *   }
    * );
+   * ```
+   *
+   * @example With breakdowns:
+   * ```typescript
+   * const allInsights = await service.getAllInsights(
+   *   ['video_p100_watched_actions'],
+   *   {
+   *     date_preset: 'last_7d',
+   *     level: 'ad',
+   *     breakdowns: ['age', 'gender'],
+   *     limit: 500  // Higher limit recommended for breakdown queries
+   *   }
+   * );
+   * // May return thousands of rows due to breakdown combinations
    * ```
    *
    * Implementation notes:
