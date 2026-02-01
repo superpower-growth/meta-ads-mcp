@@ -13,8 +13,9 @@
  * @see https://developers.facebook.com/docs/marketing-api/insights
  */
 
-import { AdAccount, Campaign, AdSet, Ad } from 'facebook-nodejs-business-sdk';
+import { AdAccount, Campaign, AdSet, Ad, FacebookAdsApi } from 'facebook-nodejs-business-sdk';
 import { api } from './client.js';
+import { env } from '../config/env.js';
 
 /**
  * Insight query parameters
@@ -153,6 +154,8 @@ export class MetricsService {
     params: InsightParams
   ): Promise<InsightObject[]> {
     try {
+      // Re-initialize API to ensure it's available (ES module issue)
+      FacebookAdsApi.init(env.META_ACCESS_TOKEN);
       const account = new AdAccount(this.accountId);
       const response = await account.getInsights(fields, params);
 
