@@ -30,3 +30,13 @@ query-*.ts
 
 # Local development scripts
 *.local.*
+
+# Claude Code configuration
+.claude.json
+.claude/
+
+# Railway deployment docs (covered by DEPLOYMENT-CHECKLIST.md)
+RAILWAY-DEPLOYMENT.md
+
+# Test scripts (optional - uncomment to track them)
+# test-device-flow.sh
