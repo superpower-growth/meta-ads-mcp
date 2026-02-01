@@ -11,7 +11,7 @@ None
 ## Phases
 
 - [x] **Phase 1: Foundation** - Meta Marketing API client setup and basic connectivity
-- [ ] **Phase 2: Core Metrics Query** - Query ad performance metrics (CTR, CPC, ROAS, video completion)
+- [x] **Phase 2: Core Metrics Query** - Query ad performance metrics (CTR, CPC, ROAS, video completion)
 - [ ] **Phase 3: Video Analytics** - Video-specific performance analysis with demographics and length breakdowns
 - [ ] **Phase 4: Comparative Reports** - Week-over-week and campaign vs campaign reporting
 - [ ] **Phase 5: Anomaly Detection** - Performance anomaly identification and surfacing
@@ -45,7 +45,7 @@ Plans:
 Plans:
 - [x] 02-01: MetricsService Foundation (insights query abstraction, response parsers, pagination)
 - [x] 02-02: Campaign Performance MCP Tool
-- [ ] 02-03: Ad Set and Ad Level Queries
+- [x] 02-03: Ad Set and Ad Level Queries
 
 ### Phase 3: Video Analytics
 **Goal**: Deliver video-specific performance breakdowns by demographics and video length
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-01-31 |
-| 2. Core Metrics Query | 2/3 | In progress | - |
+| 2. Core Metrics Query | 3/3 | Complete | 2026-02-01 |
 | 3. Video Analytics | 0/TBD | Not started | - |
 | 4. Comparative Reports | 0/TBD | Not started | - |
 | 5. Anomaly Detection | 0/TBD | Not started | - |
