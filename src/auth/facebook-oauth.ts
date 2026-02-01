@@ -65,14 +65,20 @@ async function getUserProfile(accessToken: string): Promise<FacebookUser> {
     },
   });
 
-  if (!response.data.id || !response.data.email) {
-    throw new Error('Failed to fetch user profile from Facebook');
+  if (!response.data.id) {
+    console.error('Facebook API response:', response.data);
+    throw new Error('Failed to fetch user ID from Facebook');
   }
+
+  // Email is optional - use ID as fallback
+  const email = response.data.email || `${response.data.id}@facebook.user`;
+
+  console.log('Facebook user authenticated:', { id: response.data.id, name: response.data.name, hasEmail: !!response.data.email });
 
   return {
     id: response.data.id,
     name: response.data.name || 'Facebook User',
-    email: response.data.email,
+    email: email,
   };
 }
 
