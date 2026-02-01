@@ -8,8 +8,15 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountTool } from './get-account.js';
 import { getCampaignPerformanceTool } from './get-campaign-performance.js';
+import { getAdsetPerformanceTool } from './get-adset-performance.js';
+import { getAdPerformanceTool } from './get-ad-performance.js';
 
 /**
  * All available MCP tools
  */
-export const tools: Tool[] = [getAccountTool, getCampaignPerformanceTool];
+export const tools: Tool[] = [
+  getAccountTool,
+  getCampaignPerformanceTool,
+  getAdsetPerformanceTool,
+  getAdPerformanceTool,
+];

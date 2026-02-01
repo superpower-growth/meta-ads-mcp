@@ -14,6 +14,8 @@ import {
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
 import { getCampaignPerformance } from './tools/get-campaign-performance.js';
+import { getAdsetPerformance } from './tools/get-adset-performance.js';
+import { getAdPerformance } from './tools/get-ad-performance.js';
 
 // TODO: Switch to HTTP transport after verification (for remote deployment)
 
@@ -65,6 +67,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'get-campaign-performance': {
         const result = await getCampaignPerformance(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      case 'get-adset-performance': {
+        const result = await getAdsetPerformance(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      case 'get-ad-performance': {
+        const result = await getAdPerformance(args as any);
         return {
           content: [
             {
