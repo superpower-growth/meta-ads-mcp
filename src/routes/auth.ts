@@ -181,6 +181,8 @@ router.get('/callback', async (req: Request, res: Response) => {
     req.session.name = user.name;
     req.session.expiresAt = getSessionExpiry();
 
+    console.log('Creating session for user:', { userId: user.id, name: user.name });
+
     // Save session and redirect
     req.session.save((err) => {
       if (err) {
@@ -190,6 +192,11 @@ router.get('/callback', async (req: Request, res: Response) => {
           message: 'Failed to create user session',
         });
       }
+
+      console.log('Session saved successfully. Session ID:', req.sessionID);
+      console.log('Cookie will be sent with name: connect.sid');
+
+      const cookieValue = `connect.sid=${req.sessionID}`;
 
       // Redirect to success page
       res.send(`
@@ -201,8 +208,10 @@ router.get('/callback', async (req: Request, res: Response) => {
               body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
               .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; }
               .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 15px; border-radius: 5px; margin-top: 20px; }
-              code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+              code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; word-break: break-all; }
               pre { background: #f4f4f4; padding: 10px; border-radius: 3px; overflow-x: auto; }
+              .copy-btn { background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+              .copy-btn:hover { background: #0056b3; }
             </style>
           </head>
           <body>
@@ -212,6 +221,20 @@ router.get('/callback', async (req: Request, res: Response) => {
               <p>You have successfully authenticated with Facebook.</p>
               <p>Email: ${user.email}</p>
             </div>
+            <div class="info">
+              <h3>🍪 Your Session Cookie (Copy This!)</h3>
+              <p><code id="cookieValue">${cookieValue}</code></p>
+              <button class="copy-btn" onclick="copyToClipboard()">📋 Copy Cookie</button>
+              <p style="margin-top: 15px; font-size: 14px;">Use this cookie value to configure your MCP server.</p>
+            </div>
+            <script>
+              function copyToClipboard() {
+                const text = document.getElementById('cookieValue').textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                  alert('Cookie copied to clipboard!');
+                });
+              }
+            </script>
             <div class="info">
               <h3>Next Steps: Configure Claude Code</h3>
               <ol>
