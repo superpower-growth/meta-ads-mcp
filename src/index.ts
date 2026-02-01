@@ -17,6 +17,7 @@ import { getCampaignPerformance } from './tools/get-campaign-performance.js';
 import { getAdsetPerformance } from './tools/get-adset-performance.js';
 import { getAdPerformance } from './tools/get-ad-performance.js';
 import { getVideoPerformance } from './tools/get-video-performance.js';
+import { getVideoDemographics } from './tools/get-video-demographics.js';
 
 // TODO: Switch to HTTP transport after verification (for remote deployment)
 
@@ -101,6 +102,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'get-video-performance': {
         const result = await getVideoPerformance(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      case 'get-video-demographics': {
+        const result = await getVideoDemographics(args as any);
         return {
           content: [
             {
