@@ -7,9 +7,9 @@
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { getAccountTool } from './get-account.js';
+import { getCampaignPerformanceTool } from './get-campaign-performance.js';
 
 /**
  * All available MCP tools
- * Will be expanded with more tools in Phase 2
  */
-export const tools: Tool[] = [getAccountTool];
+export const tools: Tool[] = [getAccountTool, getCampaignPerformanceTool];

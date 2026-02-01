@@ -13,6 +13,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
+import { getCampaignPerformance } from './tools/get-campaign-performance.js';
 
 // TODO: Switch to HTTP transport after verification (for remote deployment)
 
@@ -53,6 +54,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'get-account': {
         const result = await getAccountInfo(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      case 'get-campaign-performance': {
+        const result = await getCampaignPerformance(args as any);
         return {
           content: [
             {
