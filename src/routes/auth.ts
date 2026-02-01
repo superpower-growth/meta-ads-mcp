@@ -19,8 +19,9 @@ const router = Router();
  * GET /auth/facebook
  * Redirect user to Facebook OAuth login page
  */
-router.get('/facebook', (_req: Request, res: Response) => {
-  const authUrl = getAuthorizationUrl();
+router.get('/facebook', (req: Request, res: Response) => {
+  const state = req.query.state as string | undefined;
+  const authUrl = getAuthorizationUrl(state);
   res.redirect(authUrl);
 });
 
@@ -29,7 +30,7 @@ router.get('/facebook', (_req: Request, res: Response) => {
  * Handle OAuth callback from Facebook
  */
 router.get('/callback', async (req: Request, res: Response) => {
-  const { code, error, error_description } = req.query;
+  const { code, state, error, error_description } = req.query;
 
   // Handle OAuth errors
   if (error) {
@@ -51,7 +52,130 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Exchange code for user profile
     const user = await handleOAuthCallback(code);
 
-    // Create session
+    // Device flow: state = "device:<deviceCode>"
+    if (state && typeof state === 'string' && state.startsWith('device:')) {
+      const deviceCode = state.substring(7); // Extract device code
+
+      try {
+        // Authorize the device code with user data
+        await global.deviceCodeStore.authorize(deviceCode, {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        });
+
+        // Return success page for device flow
+        return res.send(`
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Authorization Successful</title>
+            <style>
+              * { margin: 0; padding: 0; box-sizing: border-box; }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+              }
+              .container {
+                background: white;
+                border-radius: 12px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                padding: 40px;
+                max-width: 480px;
+                width: 100%;
+                text-align: center;
+              }
+              .checkmark {
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                background: #5cb85c;
+                margin: 0 auto 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .checkmark svg {
+                width: 50px;
+                height: 50px;
+                fill: white;
+              }
+              h1 {
+                color: #333;
+                font-size: 28px;
+                margin-bottom: 12px;
+              }
+              .subtitle {
+                color: #666;
+                font-size: 16px;
+                margin-bottom: 24px;
+              }
+              .user-info {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 16px;
+                margin-bottom: 24px;
+              }
+              .user-info p {
+                color: #555;
+                margin: 4px 0;
+              }
+              .user-info strong {
+                color: #333;
+              }
+              .message {
+                color: #666;
+                font-size: 14px;
+                line-height: 1.6;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="checkmark">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+              </div>
+              <h1>Device Authorized!</h1>
+              <p class="subtitle">Authentication successful</p>
+              <div class="user-info">
+                <p><strong>${user.name}</strong></p>
+                <p>${user.email}</p>
+              </div>
+              <p class="message">
+                You can now close this window and return to Claude Code.<br>
+                Your MCP client is authenticated and ready to use.
+              </p>
+            </div>
+          </body>
+          </html>
+        `);
+      } catch (error) {
+        console.error('Device flow authorization error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+            <head><title>Authorization Failed</title></head>
+            <body>
+              <h1>Authorization Failed</h1>
+              <p>Error: ${errorMessage}</p>
+              <p><a href="/auth/device">Try again</a></p>
+            </body>
+          </html>
+        `);
+      }
+    }
+
+    // Traditional flow (existing logic)
     req.session.userId = user.id;
     req.session.email = user.email;
     req.session.name = user.name;
@@ -150,10 +274,10 @@ router.get('/logout', (req: Request, res: Response) => {
  */
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   res.json({
-    userId: req.session.userId,
-    email: req.session.email,
-    name: req.session.name,
-    expiresAt: req.session.expiresAt,
+    userId: req.user?.userId,
+    email: req.user?.email,
+    name: req.user?.name,
+    expiresAt: req.session?.expiresAt,
   });
 });
 

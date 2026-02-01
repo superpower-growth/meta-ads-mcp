@@ -31,6 +31,11 @@ declare module 'express-session' {
 }
 
 /**
+ * Export session TTL constant
+ */
+export const SESSION_TTL = env.SESSION_TTL;
+
+/**
  * Get session configuration for express-session middleware
  */
 export function getSessionConfig(): SessionOptions {
@@ -53,4 +58,11 @@ export function getSessionConfig(): SessionOptions {
  */
 export function getSessionExpiry(): Date {
   return new Date(Date.now() + env.SESSION_TTL);
+}
+
+/**
+ * Calculate token expiry time (same as session)
+ */
+export function getTokenExpiry(): Date {
+  return new Date(Date.now() + SESSION_TTL);
 }
