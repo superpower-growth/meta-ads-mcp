@@ -116,18 +116,23 @@ export function requireAuthForToolCall(req: Request, res: Response, next: NextFu
     return next();
   }
 
-  // For GET requests (tool discovery), allow without auth
+  // For GET requests (SSE handshake), allow without auth
   if (req.method === 'GET') {
     return next();
   }
 
-  // For POST requests (tool calls), check if it's a ListTools request
+  // For POST requests (MCP protocol), check the method
   if (req.method === 'POST' && req.body) {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
-      // Allow ListTools without authentication
-      if (body.method === 'tools/list') {
+      // Allow MCP protocol messages without authentication:
+      // - initialize: Required for MCP handshake
+      // - tools/list: Tool discovery
+      // - initialized: Notification after initialization
+      const allowedMethods = ['initialize', 'tools/list', 'initialized', 'notifications/initialized'];
+
+      if (body.method && allowedMethods.includes(body.method)) {
         return next();
       }
 
@@ -136,10 +141,11 @@ export function requireAuthForToolCall(req: Request, res: Response, next: NextFu
         return sendDeviceFlowChallenge(res);
       }
     } catch (error) {
-      // Invalid JSON, continue to require auth
+      // Invalid JSON, allow it through (MCP will handle the error)
+      return next();
     }
   }
 
-  // Default: require authentication
-  sendDeviceFlowChallenge(res);
+  // Default: allow (MCP protocol will handle)
+  next();
 }

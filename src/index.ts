@@ -242,7 +242,9 @@ async function main() {
     await transport.handleRequest(req, res);
   });
 
-  app.post('/mcp', express.text({ type: '*/*' }), requireAuthForToolCall, async (req, res) => {
+  // Parse body first, then check auth
+  const mcpBodyParser = express.text({ type: '*/*' });
+  app.post('/mcp', mcpBodyParser, requireAuthForToolCall, async (req, res) => {
     await transport.handleRequest(req, res, req.body);
   });
 
