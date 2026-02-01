@@ -12,6 +12,7 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { tools } from './tools/index.js';
+import { getAccountInfo } from './tools/get-account.js';
 
 // TODO: Switch to HTTP transport after verification (for remote deployment)
 
@@ -47,22 +48,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  // Find the tool in our registry
-  const tool = tools.find((t) => t.name === name);
-  if (!tool) {
-    throw new Error(`Unknown tool: ${name}`);
+  try {
+    // Route to appropriate tool handler
+    switch (name) {
+      case 'get-account': {
+        const result = await getAccountInfo(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  } catch (error) {
+    // Format errors for MCP protocol
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
   }
-
-  // Tool implementation will be added when we create actual tools
-  // For now, return placeholder
-  return {
-    content: [
-      {
-        type: 'text',
-        text: `Tool ${name} called with args: ${JSON.stringify(args)}`,
-      },
-    ],
-  };
 });
 
 /**

@@ -6,9 +6,10 @@
  */
 
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { getAccountTool } from './get-account.js';
 
 /**
  * All available MCP tools
- * Will be populated with actual tool definitions in Phase 2
+ * Will be expanded with more tools in Phase 2
  */
-export const tools: Tool[] = [];
+export const tools: Tool[] = [getAccountTool];
