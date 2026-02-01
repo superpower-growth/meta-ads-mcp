@@ -196,8 +196,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.log('Session saved successfully. Session ID:', req.sessionID);
       console.log('Cookie will be sent with name: connect.sid');
 
-      const cookieValue = `connect.sid=${req.sessionID}`;
-
       // Redirect to success page
       res.send(`
         <!DOCTYPE html>
@@ -222,19 +220,17 @@ router.get('/callback', async (req: Request, res: Response) => {
               <p>Email: ${user.email}</p>
             </div>
             <div class="info">
-              <h3>🍪 Your Session Cookie (Copy This!)</h3>
-              <p><code id="cookieValue">${cookieValue}</code></p>
-              <button class="copy-btn" onclick="copyToClipboard()">📋 Copy Cookie</button>
-              <p style="margin-top: 15px; font-size: 14px;">Use this cookie value to configure your MCP server.</p>
+              <h3>🍪 Get Your Session Cookie</h3>
+              <p><strong>The cookie has been set! Now extract it:</strong></p>
+              <ol style="text-align: left; margin: 15px 0;">
+                <li>Press <strong>F12</strong> to open DevTools</li>
+                <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong></li>
+                <li>Click on: <code style="font-size: 11px;">https://meta-ads-mcp-production-3b99.up.railway.app</code></li>
+                <li>Find <strong>connect.sid</strong> and copy its <strong>Value</strong></li>
+                <li>The value should start with <code>s:</code> (this is the signed cookie!)</li>
+              </ol>
+              <p style="margin-top: 15px; font-size: 14px;"><strong>Important:</strong> You need the FULL cookie value including the signature (starts with "s:").</p>
             </div>
-            <script>
-              function copyToClipboard() {
-                const text = document.getElementById('cookieValue').textContent;
-                navigator.clipboard.writeText(text).then(() => {
-                  alert('Cookie copied to clipboard!');
-                });
-              }
-            </script>
             <div class="info">
               <h3>Next Steps: Configure Claude Code</h3>
               <ol>
