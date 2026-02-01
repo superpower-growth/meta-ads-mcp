@@ -23,3 +23,10 @@ npm-debug.log*
 
 # Testing
 coverage/
+
+# Planning and temporary files
+.planning/
+query-*.ts
+
+# Local development scripts
+*.local.*

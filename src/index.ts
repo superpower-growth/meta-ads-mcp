@@ -3,15 +3,24 @@
  *
  * Entry point for the Model Context Protocol server that provides
  * conversational access to Meta Marketing API for video ad analytics.
+ *
+ * Remote HTTP server with Facebook OAuth authentication.
  */
 
 import 'dotenv/config';
+import express from 'express';
+import session from 'express-session';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import crypto from 'crypto';
+import { env } from './config/env.js';
+import { getSessionConfig } from './auth/session.js';
+import { requireAuth } from './middleware/auth.js';
+import authRoutes from './routes/auth.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
 import { getCampaignPerformance } from './tools/get-campaign-performance.js';
@@ -22,8 +31,6 @@ import { getVideoDemographics } from './tools/get-video-demographics.js';
 import { getVideoEngagement } from './tools/get-video-engagement.js';
 import { compareTimePeriods } from './tools/compare-time-periods.js';
 import { compareEntities } from './tools/compare-entities.js';
-
-// TODO: Switch to HTTP transport after verification (for remote deployment)
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -178,18 +185,57 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
- * Start MCP server with stdio transport
+ * Start MCP server with HTTP transport and OAuth authentication
  */
 async function main() {
-  const transport = new StdioServerTransport();
+  const app = express();
 
-  try {
-    await server.connect(transport);
-    console.error('Meta Ads MCP server started successfully');
-  } catch (error) {
-    console.error('Failed to start MCP server:', error);
-    process.exit(1);
-  }
+  // Middleware
+  app.use(express.json());
+  app.use(session(getSessionConfig()));
+
+  // Health check endpoint (no auth required)
+  app.get('/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      version: '0.1.0',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Auth routes
+  app.use('/auth', authRoutes);
+
+  // MCP transport with session-based authentication
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => crypto.randomUUID(),
+  });
+
+  // Connect MCP server to transport
+  await server.connect(transport);
+
+  // MCP endpoints (require authentication)
+  app.get('/mcp', requireAuth, async (req, res) => {
+    await transport.handleRequest(req, res);
+  });
+
+  app.post('/mcp', requireAuth, express.text({ type: '*/*' }), async (req, res) => {
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  // Start HTTP server
+  const PORT = env.PORT;
+  const HOST = env.HOST;
+
+  app.listen(PORT, HOST, () => {
+    console.error(`Meta Ads MCP server running on http://${HOST}:${PORT}`);
+    console.error(`Health check: http://${HOST}:${PORT}/health`);
+    console.error(`Login: http://${HOST}:${PORT}/auth/facebook`);
+    console.error(`Environment: ${env.NODE_ENV}`);
+  });
 }
 
-main();
+main().catch((error) => {
+  console.error('Failed to start MCP server:', error);
+  process.exit(1);
+});

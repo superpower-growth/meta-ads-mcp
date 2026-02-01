@@ -20,6 +20,32 @@ const envSchema = z.object({
     .optional()
     .default('3000')
     .transform((val) => parseInt(val, 10)),
+  HOST: z
+    .string()
+    .optional()
+    .default('0.0.0.0'),
+  NODE_ENV: z
+    .enum(['development', 'production', 'test'])
+    .optional()
+    .default('development'),
+  FACEBOOK_APP_ID: z
+    .string()
+    .min(1, 'FACEBOOK_APP_ID environment variable is required for OAuth. See .env.example for setup.'),
+  FACEBOOK_APP_SECRET: z
+    .string()
+    .min(1, 'FACEBOOK_APP_SECRET environment variable is required for OAuth. See .env.example for setup.'),
+  FACEBOOK_CALLBACK_URL: z
+    .string()
+    .url('FACEBOOK_CALLBACK_URL must be a valid URL')
+    .default('http://localhost:3000/auth/callback'),
+  SESSION_SECRET: z
+    .string()
+    .min(32, 'SESSION_SECRET must be at least 32 characters for security. Generate with: openssl rand -base64 32'),
+  SESSION_TTL: z
+    .string()
+    .optional()
+    .default('86400000')
+    .transform((val) => parseInt(val, 10)),
 });
 
 // Parse and validate environment variables
@@ -29,6 +55,13 @@ const parseEnv = () => {
       META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN,
       META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID,
       PORT: process.env.PORT,
+      HOST: process.env.HOST,
+      NODE_ENV: process.env.NODE_ENV,
+      FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID,
+      FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET,
+      FACEBOOK_CALLBACK_URL: process.env.FACEBOOK_CALLBACK_URL,
+      SESSION_SECRET: process.env.SESSION_SECRET,
+      SESSION_TTL: process.env.SESSION_TTL,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
