@@ -63,7 +63,11 @@ Plans:
 **Goal**: Generate week-over-week and campaign comparison reports
 **Depends on**: Phase 3
 **Research**: Unlikely (data processing patterns established in phases 2-3)
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 04-01: Time Period Comparison (delta calculation, change classification, trend identification)
+- [x] 04-02: Entity Comparison and Ranking (competitive analysis, percentiles, top/bottom performers)
 
 ### Phase 5: Anomaly Detection
 **Goal**: Detect and surface performance anomalies automatically
@@ -116,7 +120,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Foundation | 3/3 | Complete | 2026-01-31 |
 | 2. Core Metrics Query | 3/3 | Complete | 2026-02-01 |
 | 3. Video Analytics | 3/3 | Complete | 2026-02-01 |
-| 4. Comparative Reports | 0/TBD | Not started | - |
+| 4. Comparative Reports | 2/2 | Complete | 2026-02-01 |
 | 5. Anomaly Detection | 0/TBD | Not started | - |
 | 6. Budget Management | 0/TBD | Not started | - |
 | 7. Team Authentication | 0/TBD | Not started | - |
