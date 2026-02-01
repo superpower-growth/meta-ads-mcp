@@ -10,8 +10,8 @@
 import axios from 'axios';
 import { env } from '../config/env.js';
 
-const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v21.0';
-const FACEBOOK_OAUTH_DIALOG = 'https://www.facebook.com/v21.0';
+const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v24.0';
+const FACEBOOK_OAUTH_DIALOG = 'https://www.facebook.com/v24.0';
 
 export interface FacebookUser {
   id: string;
