@@ -204,6 +204,12 @@ global.accessTokenStore = accessTokenStore;
 async function main() {
   const app = express();
 
+  // Trust Railway proxy for secure cookies
+  // Railway terminates SSL at the proxy level, so we need to trust X-Forwarded-Proto
+  if (env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+  }
+
   // Middleware
   app.use(express.json());
   app.use(session(getSessionConfig()));
