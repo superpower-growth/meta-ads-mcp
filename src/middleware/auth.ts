@@ -126,6 +126,9 @@ export function requireAuthForToolCall(req: Request, res: Response, next: NextFu
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
+      console.log('[Auth Middleware] POST request body:', JSON.stringify(body));
+      console.log('[Auth Middleware] Method:', body.method);
+
       // Allow MCP protocol messages without authentication:
       // - initialize: Required for MCP handshake
       // - tools/list: Tool discovery
@@ -133,14 +136,17 @@ export function requireAuthForToolCall(req: Request, res: Response, next: NextFu
       const allowedMethods = ['initialize', 'tools/list', 'initialized', 'notifications/initialized'];
 
       if (body.method && allowedMethods.includes(body.method)) {
+        console.log('[Auth Middleware] Allowing method:', body.method);
         return next();
       }
 
       // Require auth for tool calls
       if (body.method === 'tools/call') {
+        console.log('[Auth Middleware] Blocking tools/call - requires auth');
         return sendDeviceFlowChallenge(res);
       }
     } catch (error) {
+      console.log('[Auth Middleware] Error parsing body:', error);
       // Invalid JSON, allow it through (MCP will handle the error)
       return next();
     }
