@@ -11,6 +11,7 @@ import axios from 'axios';
 import { env } from '../config/env.js';
 
 const FACEBOOK_GRAPH_API = 'https://graph.facebook.com/v21.0';
+const FACEBOOK_OAUTH_DIALOG = 'https://www.facebook.com/v21.0';
 
 export interface FacebookUser {
   id: string;
@@ -30,7 +31,7 @@ export function getAuthorizationUrl(state?: string): string {
     ...(state && { state }),
   });
 
-  return `${FACEBOOK_GRAPH_API}/dialog/oauth?${params.toString()}`;
+  return `${FACEBOOK_OAUTH_DIALOG}/dialog/oauth?${params.toString()}`;
 }
 
 /**
