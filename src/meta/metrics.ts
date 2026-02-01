@@ -154,6 +154,92 @@ export class MetricsService {
   }
 
   /**
+   * Get all insights with automatic pagination
+   *
+   * Fetches all pages of insights data by recursively following paging.next cursor.
+   * Aggregates results from all pages into a single array.
+   *
+   * @param fields - Array of metric field names to retrieve
+   * @param params - Query parameters (date_preset, level, time_increment, limit)
+   * @returns Promise resolving to complete array of all insight objects across all pages
+   * @throws Error if any page fails with page number context
+   *
+   * @example
+   * ```typescript
+   * // Fetch all campaign insights for last 30 days (may span multiple pages)
+   * const allInsights = await service.getAllInsights(
+   *   ['impressions', 'clicks', 'spend'],
+   *   {
+   *     date_preset: 'last_30d',
+   *     level: 'campaign',
+   *     limit: 100  // Increase page size to reduce pagination rounds
+   *   }
+   * );
+   * ```
+   *
+   * Implementation notes:
+   * - Default limit is 25 records per page
+   * - Can set params.limit up to 5000 to reduce pagination rounds
+   * - Checks response.paging.next for additional pages
+   * - Recursively fetches all pages until paging.next is undefined
+   *
+   * WARNING: For queries spanning >1 year with daily data, use async jobs instead (not yet implemented).
+   * Large synchronous queries may timeout. Consider splitting date ranges or using higher limit values.
+   */
+  async getAllInsights(
+    fields: string[],
+    params: InsightParams
+  ): Promise<InsightObject[]> {
+    const allInsights: InsightObject[] = [];
+    let pageNumber = 1;
+
+    try {
+      const account = new AdAccount(this.accountId);
+      let response = await account.getInsights(fields, params);
+
+      // Process first page
+      for (const insight of response) {
+        allInsights.push(insight as InsightObject);
+      }
+
+      // Fetch additional pages if they exist
+      while (response.paging && response.paging.next) {
+        pageNumber++;
+
+        try {
+          // Fetch next page using cursor
+          response = await response.next();
+
+          for (const insight of response) {
+            allInsights.push(insight as InsightObject);
+          }
+
+          // Log warning if dataset is very large
+          if (allInsights.length > 1000 && allInsights.length % 1000 === 0) {
+            console.warn(
+              `[MetricsService] Large dataset detected: ${allInsights.length} records fetched so far`
+            );
+          }
+        } catch (error: any) {
+          // If any page fails, throw error with page number context
+          const errorMessage = this.formatMetaError(error);
+          throw new Error(`Meta Insights API error on page ${pageNumber}: ${errorMessage}`);
+        }
+      }
+
+      return allInsights;
+    } catch (error: any) {
+      // Handle first page error
+      if (pageNumber === 1) {
+        const errorMessage = this.formatMetaError(error);
+        throw new Error(`Meta Insights API error: ${errorMessage}`);
+      }
+      // Re-throw pagination errors with context
+      throw error;
+    }
+  }
+
+  /**
    * Format Meta API error into readable message
    *
    * @param error - Error object from Meta SDK
