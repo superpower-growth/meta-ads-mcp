@@ -19,6 +19,7 @@ import { getAdPerformance } from './tools/get-ad-performance.js';
 import { getVideoPerformance } from './tools/get-video-performance.js';
 import { getVideoDemographics } from './tools/get-video-demographics.js';
 import { getVideoEngagement } from './tools/get-video-engagement.js';
+import { compareTimePeriods } from './tools/compare-time-periods.js';
 
 // TODO: Switch to HTTP transport after verification (for remote deployment)
 
@@ -125,6 +126,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'get-video-engagement': {
         const result = await getVideoEngagement(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      case 'compare-time-periods': {
+        const result = await compareTimePeriods(args as any);
         return {
           content: [
             {
