@@ -44,10 +44,10 @@ function sendDeviceFlowChallenge(res: Response): void {
 }
 
 /**
- * Middleware to require authentication for protected routes
- * Supports both Bearer token (Priority 1) and session cookie (Priority 2)
+ * Check if user is authenticated (helper function)
+ * Returns user data if authenticated, null otherwise
  */
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+function checkAuth(req: Request): { userId: string; email: string; name: string } | null {
   // Priority 1: Check Bearer token (device flow)
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
@@ -57,13 +57,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     if (global.accessTokenStore) {
       const tokenData = global.accessTokenStore.validate(token);
       if (tokenData) {
-        // Set user data on request
-        req.user = {
+        return {
           userId: tokenData.userId,
           email: tokenData.email,
           name: tokenData.name,
         };
-        return next();
       }
     }
   }
@@ -77,19 +75,71 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
           console.error('Error destroying expired session:', err);
         }
       });
-
-      return sendDeviceFlowChallenge(res);
+      return null;
     }
 
-    // Set user data on request
-    req.user = {
+    return {
       userId: req.session.userId,
       email: req.session.email || '',
       name: req.session.name || '',
     };
+  }
+
+  return null;
+}
+
+/**
+ * Middleware to require authentication for protected routes
+ * Supports both Bearer token (Priority 1) and session cookie (Priority 2)
+ */
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const user = checkAuth(req);
+
+  if (user) {
+    req.user = user;
     return next();
   }
 
   // Unauthenticated: Return device flow instructions
+  sendDeviceFlowChallenge(res);
+}
+
+/**
+ * Middleware for MCP endpoints that allows tool discovery without auth
+ * but requires auth for tool execution
+ */
+export function requireAuthForToolCall(req: Request, res: Response, next: NextFunction): void {
+  const user = checkAuth(req);
+
+  if (user) {
+    req.user = user;
+    return next();
+  }
+
+  // For GET requests (tool discovery), allow without auth
+  if (req.method === 'GET') {
+    return next();
+  }
+
+  // For POST requests (tool calls), check if it's a ListTools request
+  if (req.method === 'POST' && req.body) {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+      // Allow ListTools without authentication
+      if (body.method === 'tools/list') {
+        return next();
+      }
+
+      // Require auth for tool calls
+      if (body.method === 'tools/call') {
+        return sendDeviceFlowChallenge(res);
+      }
+    } catch (error) {
+      // Invalid JSON, continue to require auth
+    }
+  }
+
+  // Default: require authentication
   sendDeviceFlowChallenge(res);
 }

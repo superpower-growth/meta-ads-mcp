@@ -19,7 +19,7 @@ import {
 import crypto from 'crypto';
 import { env } from './config/env.js';
 import { getSessionConfig } from './auth/session.js';
-import { requireAuth } from './middleware/auth.js';
+import { requireAuth, requireAuthForToolCall } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/device.js';
 import { DeviceCodeStore, AccessTokenStore } from './auth/device-flow.js';
@@ -237,12 +237,12 @@ async function main() {
   // Connect MCP server to transport
   await server.connect(transport);
 
-  // MCP endpoints (require authentication)
-  app.get('/mcp', requireAuth, async (req, res) => {
+  // MCP endpoints (allow tool discovery, require auth for tool calls)
+  app.get('/mcp', requireAuthForToolCall, async (req, res) => {
     await transport.handleRequest(req, res);
   });
 
-  app.post('/mcp', requireAuth, express.text({ type: '*/*' }), async (req, res) => {
+  app.post('/mcp', express.text({ type: '*/*' }), requireAuthForToolCall, async (req, res) => {
     await transport.handleRequest(req, res, req.body);
   });
 
