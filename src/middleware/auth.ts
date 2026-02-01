@@ -24,22 +24,29 @@ declare global {
 }
 
 /**
- * Send device flow challenge response
+ * Send device flow challenge response in JSONRPC format
  */
 function sendDeviceFlowChallenge(res: Response): void {
   res.status(401).json({
-    error: 'authentication_required',
-    message: 'Please authenticate using device flow.',
-    device_flow: {
-      endpoint: '/auth/device/code',
-      instructions: [
-        '1. POST to /auth/device/code to get device code',
-        '2. Visit verification_uri and enter user_code',
-        '3. Poll /auth/device/token until authorized',
-        '4. Use access_token in Authorization: Bearer header',
-      ],
+    jsonrpc: '2.0',
+    error: {
+      code: -32001,
+      message: 'Authentication required. Please authenticate using device flow.',
+      data: {
+        authentication: {
+          type: 'device_flow',
+          endpoint: '/auth/device/code',
+          instructions: [
+            '1. POST to /auth/device/code to get device code',
+            '2. Visit verification_uri and enter user_code',
+            '3. Poll /auth/device/token until authorized',
+            '4. Use access_token in Authorization: Bearer header',
+          ],
+          loginUrl: '/auth/facebook',
+        },
+      },
     },
-    loginUrl: '/auth/facebook', // Backward compatibility
+    id: null,
   });
 }
 
