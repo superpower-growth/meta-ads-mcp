@@ -40,7 +40,12 @@ Plans:
 **Depends on**: Phase 1
 **Research**: Likely (Meta Marketing API endpoints and metric definitions)
 **Research topics**: Meta Insights API structure, metric field names, date range queries, pagination
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 02-01: MetricsService Foundation (insights query abstraction, response parsers, pagination)
+- [ ] 02-02: Campaign Performance MCP Tool
+- [ ] 02-03: Ad Set and Ad Level Queries
 
 ### Phase 3: Video Analytics
 **Goal**: Deliver video-specific performance breakdowns by demographics and video length
@@ -104,7 +109,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-01-31 |
-| 2. Core Metrics Query | 0/TBD | Not started | - |
+| 2. Core Metrics Query | 1/3 | In progress | - |
 | 3. Video Analytics | 0/TBD | Not started | - |
 | 4. Comparative Reports | 0/TBD | Not started | - |
 | 5. Anomaly Detection | 0/TBD | Not started | - |
