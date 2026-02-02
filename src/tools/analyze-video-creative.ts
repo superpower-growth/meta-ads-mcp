@@ -14,6 +14,7 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { downloadAndUploadVideo, getVideoMetadata } from '../lib/video-downloader.js';
 import { analyzeVideoWithCostGuard, estimateAnalysisCost, type VideoAnalysis } from '../lib/gemini-analyzer.js';
 import { isGeminiEnabled } from '../lib/gemini-client.js';
+import { getCached, setCached } from '../lib/firestore-cache.js';
 
 /**
  * Input schema for analyze-video-creative tool
@@ -97,6 +98,32 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
       };
       return JSON.stringify(response, null, 2);
     }
+
+    // Check cache before expensive operations
+    console.log(`Checking cache for video ${metadata.videoId}...`);
+    const cachedEntry = await getCached(metadata.videoId);
+
+    if (cachedEntry) {
+      console.log(`Cache HIT for video ${metadata.videoId} (hitCount: ${cachedEntry.hitCount}, age: ${Math.round((Date.now() - cachedEntry.createdAt.getTime()) / 1000 / 60)} minutes)`);
+
+      const response: AnalyzeVideoCreativeResponse = {
+        adId: args.adId,
+        videoId: metadata.videoId,
+        analysis: cachedEntry.analysisResults,
+      };
+
+      if (args.includeMetadata) {
+        response.metadata = {
+          duration: metadata.duration,
+          thumbnailUrl: metadata.thumbnailUrl,
+          gcsPath: cachedEntry.gcsPath,
+        };
+      }
+
+      return JSON.stringify(response, null, 2);
+    }
+
+    console.log(`Cache MISS for video ${metadata.videoId} - proceeding with analysis`);
 
     // Log cost estimation before analysis
     const estimatedCost = estimateAnalysisCost(metadata.duration);
@@ -213,6 +240,20 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
 
     // Log success
     console.log(`Successfully analyzed video ${metadata.videoId} for ad ${args.adId}: ${analysis.scenes.length} scenes, ${analysis.textOverlays.length} text overlays`);
+
+    // Cache the analysis result for future requests
+    try {
+      await setCached({
+        videoId: metadata.videoId,
+        adId: args.adId,
+        analysisResults: analysis,
+        gcsPath,
+      });
+      console.log(`Cached analysis for video ${metadata.videoId}`);
+    } catch (error) {
+      // Don't fail the request if caching fails
+      console.warn(`Failed to cache analysis for ${metadata.videoId}:`, error instanceof Error ? error.message : error);
+    }
 
     // Build response
     const response: AnalyzeVideoCreativeResponse = {
