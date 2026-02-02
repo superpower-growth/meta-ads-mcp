@@ -235,12 +235,40 @@ async function main() {
   app.use(session(getSessionConfig()));
 
   // Health check endpoint (no auth required)
-  app.get('/health', (_req, res) => {
-    res.json({
+  app.get('/health', async (_req, res) => {
+    const healthResponse: any = {
       status: 'ok',
       version: '0.1.0',
       timestamp: new Date().toISOString(),
-    });
+      gcs: {},
+    };
+
+    // Check GCS connectivity
+    if (!isGcpEnabled) {
+      healthResponse.gcs = {
+        enabled: false,
+        reason: 'No credentials configured',
+      };
+    } else {
+      try {
+        const bucket = storage!.bucket(env.GCS_BUCKET_NAME);
+        const [exists] = await bucket.exists();
+        healthResponse.gcs = {
+          enabled: true,
+          bucket: env.GCS_BUCKET_NAME,
+          exists,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        healthResponse.gcs = {
+          enabled: true,
+          bucket: env.GCS_BUCKET_NAME,
+          error: message,
+        };
+      }
+    }
+
+    res.json(healthResponse);
   });
 
   // OAuth 2.0 Dynamic Client Registration
