@@ -72,8 +72,23 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
     }
 
     // Get video metadata
-    const metadata = await getVideoMetadata(args.adId);
+    let metadata;
+    try {
+      metadata = await getVideoMetadata(args.adId);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to fetch video metadata for ad ${args.adId}: ${errorMessage}`);
+      const response: AnalyzeVideoCreativeResponse = {
+        adId: args.adId,
+        videoId: null,
+        analysis: null,
+        message: `Failed to fetch video metadata: ${errorMessage}. Check if ad exists and has valid permissions.`
+      };
+      return JSON.stringify(response, null, 2);
+    }
+
     if (!metadata) {
+      console.log(`Ad ${args.adId} is not a video ad`);
       const response: AnalyzeVideoCreativeResponse = {
         adId: args.adId,
         videoId: null,
@@ -88,7 +103,41 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
     console.log(`Analyzing video ${metadata.videoId} for ad ${args.adId}: estimated cost $${estimatedCost.toFixed(4)} (${metadata.duration}s)`);
 
     // Download and upload video to GCS
-    const gcsPath = await downloadAndUploadVideo(args.adId);
+    let gcsPath;
+    try {
+      gcsPath = await downloadAndUploadVideo(args.adId);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Check for URL expiration
+      if (errorMessage.includes('expired') || errorMessage.includes('403') || errorMessage.includes('404')) {
+        console.error(`Video URL may have expired for ad ${args.adId}, video ${metadata.videoId}: ${errorMessage}`);
+        const response: AnalyzeVideoCreativeResponse = {
+          adId: args.adId,
+          videoId: metadata.videoId,
+          analysis: null,
+          message: 'Video URL expired. Meta video URLs are temporary. Please retry to fetch a fresh URL.'
+        };
+        return JSON.stringify(response, null, 2);
+      }
+
+      // Check for GCS configuration issues
+      if (errorMessage.includes('GCP') || errorMessage.includes('bucket') || errorMessage.includes('credentials')) {
+        console.error(`GCS configuration error for ad ${args.adId}, video ${metadata.videoId}: ${errorMessage}`);
+        const response: AnalyzeVideoCreativeResponse = {
+          adId: args.adId,
+          videoId: metadata.videoId,
+          analysis: null,
+          message: `GCS configuration error: ${errorMessage}. Check GOOGLE_SERVICE_ACCOUNT_JSON and bucket permissions.`
+        };
+        return JSON.stringify(response, null, 2);
+      }
+
+      // Generic download/upload error
+      console.error(`Video download/upload failed for ad ${args.adId}, video ${metadata.videoId}: ${errorMessage}`);
+      throw error;
+    }
+
     if (!gcsPath) {
       const response: AnalyzeVideoCreativeResponse = {
         adId: args.adId,
@@ -96,9 +145,12 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
         analysis: null,
         message: 'Failed to download video from Meta API or upload to GCS.'
       };
-      console.error(`Video download/upload failed for ad ${args.adId}, video ${metadata.videoId}`);
+      console.error(`Video download/upload returned null for ad ${args.adId}, video ${metadata.videoId}`);
       return JSON.stringify(response, null, 2);
     }
+
+    console.log(`Video ${metadata.videoId} downloaded and uploaded to ${gcsPath}`);
+
 
     // Analyze video with cost guard
     let analysis: VideoAnalysis;
@@ -120,12 +172,24 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
 
       // Check for rate limit
       if (errorMessage.includes('429') || errorMessage.includes('quota')) {
-        console.error(`Rate limit hit for video ${metadata.videoId}, ad ${args.adId}`);
+        console.error(`Rate limit hit for video ${metadata.videoId}, ad ${args.adId}. Consider reducing request rate or upgrading API tier.`);
         const response: AnalyzeVideoCreativeResponse = {
           adId: args.adId,
           videoId: metadata.videoId,
           analysis: null,
           message: 'Gemini API rate limit reached. Please try again later or upgrade your API tier.'
+        };
+        return JSON.stringify(response, null, 2);
+      }
+
+      // Check for authentication errors
+      if (errorMessage.includes('auth') || errorMessage.includes('permission') || errorMessage.includes('401') || errorMessage.includes('403')) {
+        console.error(`Authentication failed for video ${metadata.videoId}, ad ${args.adId}: ${errorMessage}. Check GEMINI_API_KEY or service account permissions.`);
+        const response: AnalyzeVideoCreativeResponse = {
+          adId: args.adId,
+          videoId: metadata.videoId,
+          analysis: null,
+          message: `Gemini authentication failed: ${errorMessage}. Verify API key or Vertex AI service account permissions.`
         };
         return JSON.stringify(response, null, 2);
       }
