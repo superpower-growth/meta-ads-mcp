@@ -72,12 +72,29 @@ const envSchema = z.object({
   GCP_PROJECT_ID: z
     .string()
     .optional(),
+
+  // Gemini AI Configuration (optional - for video content analysis)
+  GEMINI_API_KEY: z
+    .string()
+    .optional(),
+  GEMINI_MODEL: z
+    .string()
+    .default('gemini-2.5-flash'),
+  GEMINI_USE_VERTEX_AI: z
+    .coerce
+    .boolean()
+    .default(false),
+  GEMINI_MAX_COST_PER_ANALYSIS: z
+    .coerce
+    .number()
+    .positive()
+    .default(0.10),
 });
 
 // Parse and validate environment variables
 const parseEnv = () => {
   try {
-    return envSchema.parse({
+    const parsed = envSchema.parse({
       META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN,
       META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID,
       PORT: process.env.PORT,
@@ -92,7 +109,23 @@ const parseEnv = () => {
       GCS_BUCKET_NAME: process.env.GCS_BUCKET_NAME,
       FIRESTORE_CACHE_TTL_HOURS: process.env.FIRESTORE_CACHE_TTL_HOURS,
       GCP_PROJECT_ID: process.env.GCP_PROJECT_ID,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+      GEMINI_MODEL: process.env.GEMINI_MODEL,
+      GEMINI_USE_VERTEX_AI: process.env.GEMINI_USE_VERTEX_AI,
+      GEMINI_MAX_COST_PER_ANALYSIS: process.env.GEMINI_MAX_COST_PER_ANALYSIS,
     });
+
+    // Validation: Require GEMINI_API_KEY if not using Vertex AI
+    if (!parsed.GEMINI_USE_VERTEX_AI && !parsed.GEMINI_API_KEY) {
+      console.warn('Gemini AI not configured: GEMINI_API_KEY not set and GEMINI_USE_VERTEX_AI is false. Video analysis features will be disabled.');
+    }
+
+    // Validation: Require GCP setup if using Vertex AI
+    if (parsed.GEMINI_USE_VERTEX_AI && !parsed.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      console.warn('Gemini Vertex AI mode enabled but GOOGLE_SERVICE_ACCOUNT_JSON not configured. Video analysis features will be disabled.');
+    }
+
+    return parsed;
   } catch (error) {
     if (error instanceof z.ZodError) {
       const messages = error.issues.map((err) => `  - ${err.path.join('.')}: ${err.message}`);
