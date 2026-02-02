@@ -161,8 +161,8 @@ export async function getAdPerformance(args: unknown): Promise<string> {
       };
     }
 
-    // Query insights from Meta API
-    const insights = await metricsService.getAccountInsights(fields, params);
+    // Query insights from Meta API with automatic pagination
+    const insights = await metricsService.getAllInsights(fields, params);
 
     // Filter to specific ad if requested
     let filteredInsights = insights;

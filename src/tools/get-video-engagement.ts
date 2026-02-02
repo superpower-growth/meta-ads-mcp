@@ -118,8 +118,8 @@ export async function getVideoEngagement(args: unknown): Promise<string> {
       action_attribution_windows: input.attributionWindows,
     };
 
-    // Query insights from Meta API
-    const insights = await metricsService.getAccountInsights(fields, params);
+    // Query insights from Meta API with automatic pagination
+    const insights = await metricsService.getAllInsights(fields, params);
 
     // Filter to specific entity if requested
     let filteredInsights = insights;

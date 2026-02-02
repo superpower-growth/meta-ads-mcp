@@ -84,8 +84,8 @@ export async function getCampaignPerformance(args: unknown): Promise<string> {
       action_attribution_windows: input.attributionWindows,
     };
 
-    // Query insights from Meta API
-    const insights = await metricsService.getAccountInsights(input.metrics, params);
+    // Query insights from Meta API with automatic pagination
+    const insights = await metricsService.getAllInsights(input.metrics, params);
 
     // Filter to specific campaign if requested
     let filteredInsights = insights;

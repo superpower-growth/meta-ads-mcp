@@ -164,13 +164,14 @@ export async function compareTimePeriods(args: unknown): Promise<string> {
       time_increment: 'all_days' as const,
     };
 
-    const currentData = await metricsService.getAccountInsights(fields, {
+    // Query with automatic pagination to get all entities
+    const currentData = await metricsService.getAllInsights(fields, {
       ...paramsBase,
       time_range: input.currentPeriod,
     });
 
-    // Query previous period
-    const previousData = await metricsService.getAccountInsights(fields, {
+    // Query previous period with automatic pagination
+    const previousData = await metricsService.getAllInsights(fields, {
       ...paramsBase,
       time_range: input.previousPeriod,
     });

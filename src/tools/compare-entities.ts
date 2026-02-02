@@ -140,7 +140,8 @@ export async function compareEntities(args: unknown): Promise<string> {
       time_increment: 'all_days' as const,
     };
 
-    const data = await metricsService.getAccountInsights(fields, params);
+    // Query with automatic pagination to get all entities
+    const data = await metricsService.getAllInsights(fields, params);
 
     // Filter to specific entityIds if provided
     let filteredData = data;
