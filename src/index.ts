@@ -24,6 +24,7 @@ import { requireAuthForToolCall } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import { AccessTokenStore } from './auth/device-flow.js';
+import { storage, firestore, isGcpEnabled } from './lib/gcp-clients.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
 import { getCampaignPerformance } from './tools/get-campaign-performance.js';
