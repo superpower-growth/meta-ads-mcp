@@ -15,6 +15,7 @@ import { downloadAndUploadVideo, getVideoMetadata } from '../lib/video-downloade
 import { analyzeVideoWithCostGuard, estimateAnalysisCost, type VideoAnalysis } from '../lib/gemini-analyzer.js';
 import { isGeminiEnabled } from '../lib/gemini-client.js';
 import { getCached, setCached } from '../lib/firestore-cache.js';
+import { env } from '../config/env.js';
 
 /**
  * Input schema for analyze-video-creative tool
@@ -108,7 +109,14 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
     const cachedEntry = await getCached(metadata.videoId);
 
     if (cachedEntry) {
-      console.log(`Cache HIT for video ${metadata.videoId} (hitCount: ${cachedEntry.hitCount}, age: ${Math.round((Date.now() - cachedEntry.createdAt.getTime()) / 1000 / 60)} minutes)`);
+      const savedCost = estimateAnalysisCost(metadata.duration);
+      console.log(`Cache HIT for video ${metadata.videoId}:`, {
+        adId: args.adId,
+        hitCount: cachedEntry.hitCount,
+        age: `${Math.round((Date.now() - cachedEntry.createdAt.getTime()) / 1000 / 60)} minutes`,
+        timeToExpiry: `${Math.round((cachedEntry.expiresAt.getTime() - Date.now()) / 1000 / 60 / 60)} hours`,
+        savedCost: `$${savedCost.toFixed(4)}`,
+      });
 
       const response: AnalyzeVideoCreativeResponse = {
         adId: args.adId,
@@ -130,7 +138,10 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
       return JSON.stringify(response, null, 2);
     }
 
-    console.log(`Cache MISS for video ${metadata.videoId} - proceeding with analysis`);
+    console.log(`Cache MISS for video ${metadata.videoId}:`, {
+      adId: args.adId,
+      reason: 'not found or expired',
+    });
 
     // Log cost estimation before analysis
     const estimatedCost = estimateAnalysisCost(metadata.duration);
@@ -256,7 +267,12 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
         analysisResults: analysis,
         gcsPath,
       });
-      console.log(`Cached analysis for video ${metadata.videoId}`);
+      const expiresAt = new Date(Date.now() + env.FIRESTORE_CACHE_TTL_HOURS * 60 * 60 * 1000);
+      console.log(`Cached analysis for video ${metadata.videoId}:`, {
+        adId: args.adId,
+        ttl: `${env.FIRESTORE_CACHE_TTL_HOURS} hours`,
+        expiresAt: expiresAt.toISOString(),
+      });
     } catch (error) {
       // Don't fail the request if caching fails
       console.warn(`Failed to cache analysis for ${metadata.videoId}:`, error instanceof Error ? error.message : error);
