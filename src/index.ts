@@ -10,6 +10,7 @@
 import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
+import cors from 'cors';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
@@ -218,6 +219,15 @@ async function main() {
     app.set('trust proxy', 1);
   }
 
+  // CORS configuration for MCP connections
+  app.use(cors({
+    origin: true, // Allow all origins for MCP clients
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    exposedHeaders: ['Content-Type'],
+  }));
+
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true })); // For OAuth token requests
@@ -248,6 +258,11 @@ async function main() {
 
   // MCP endpoints (allow tool discovery, require auth for tool calls)
   app.get('/mcp', requireAuthForToolCall, async (req, res) => {
+    // Set SSE headers for long-lived connections
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
     await transport.handleRequest(req, res);
   });
 
