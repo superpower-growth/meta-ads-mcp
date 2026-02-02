@@ -38,11 +38,13 @@ export interface RoasMetrics {
  *
  * Converts array of action objects into a simple key-value map.
  * Handles missing/null arrays and converts string values to numbers.
+ * When attribution windows are specified, sums values from the requested windows only.
  *
  * @param actions - Actions array from Meta API (e.g., [{action_type: 'purchase', value: '42'}])
+ * @param attributionWindows - Optional array of attribution windows to sum (e.g., ['7d_click', '1d_view'])
  * @returns Object mapping action types to numeric values
  *
- * @example
+ * @example Without attribution windows:
  * ```typescript
  * const actions = [
  *   {action_type: 'purchase', value: '42'},
@@ -51,8 +53,20 @@ export interface RoasMetrics {
  * const parsed = parseActions(actions);
  * // Returns: {purchase: 42, link_click: 18}
  * ```
+ *
+ * @example With attribution windows:
+ * ```typescript
+ * const actions = [
+ *   {action_type: 'purchase', '1d_click': '5', '7d_click': '15', '28d_click': '44'}
+ * ];
+ * const parsed = parseActions(actions, ['7d_click']);
+ * // Returns: {purchase: 15}
+ * ```
  */
-export function parseActions(actions: any[]): Record<string, number> {
+export function parseActions(
+  actions: any[],
+  attributionWindows?: string[]
+): Record<string, number> {
   // Handle missing/null arrays
   if (!actions || !Array.isArray(actions)) {
     return {};
@@ -61,8 +75,27 @@ export function parseActions(actions: any[]): Record<string, number> {
   const result: Record<string, number> = {};
 
   for (const action of actions) {
-    if (action && action.action_type && action.value !== undefined) {
-      // Convert string values to numbers
+    if (!action || !action.action_type) {
+      continue;
+    }
+
+    // If attribution windows are specified, sum values from those windows only
+    if (attributionWindows && attributionWindows.length > 0) {
+      let total = 0;
+      for (const window of attributionWindows) {
+        if (action[window] !== undefined) {
+          const value =
+            typeof action[window] === 'string' ? parseFloat(action[window]) : action[window];
+          if (!isNaN(value)) {
+            total += value;
+          }
+        }
+      }
+      if (total > 0) {
+        result[action.action_type] = total;
+      }
+    } else if (action.value !== undefined) {
+      // Fallback to 'value' field if no attribution windows specified
       const value = typeof action.value === 'string' ? parseFloat(action.value) : action.value;
       result[action.action_type] = isNaN(value) ? 0 : value;
     }

@@ -154,11 +154,17 @@ export async function getVideoDemographics(args: unknown): Promise<string> {
       const videoMetrics = parseVideoMetrics(insight);
 
       // Parse play actions
-      const playActions = parseActions(insight.video_play_actions || []);
+      const playActions = parseActions(
+        insight.video_play_actions || [],
+        input.attributionWindows
+      );
       const plays = playActions.video_view || 0;
 
       // Parse ThruPlay (15s or complete view)
-      const thruplayActions = parseActions(insight.video_thruplay_watched_actions || []);
+      const thruplayActions = parseActions(
+        insight.video_thruplay_watched_actions || [],
+        input.attributionWindows
+      );
       const thruplay = thruplayActions.video_view || 0;
 
       // Build completion funnel

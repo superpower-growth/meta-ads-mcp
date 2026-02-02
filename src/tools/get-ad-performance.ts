@@ -207,10 +207,13 @@ export async function getAdPerformance(args: unknown): Promise<string> {
 
         // Parse custom actions if requested
         if (input.customActions && input.customActions.length > 0) {
-          const actions = parseActions(insight.actions || []);
-          const costPerActions = parseActions(insight.cost_per_action_type || []);
+          const actions = parseActions(insight.actions || [], input.attributionWindows);
+          const costPerActions = parseActions(
+            insight.cost_per_action_type || [],
+            input.attributionWindows
+          );
           const actionValues = input.includeActionValues
-            ? parseActions(insight.action_values || [])
+            ? parseActions(insight.action_values || [], input.attributionWindows)
             : {};
 
           // Extract requested custom action values

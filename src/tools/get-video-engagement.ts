@@ -161,20 +161,35 @@ export async function getVideoEngagement(args: unknown): Promise<string> {
         const videoMetrics = parseVideoMetrics(insight);
 
         // Parse play actions
-        const playActions = parseActions(insight.video_play_actions || []);
+        const playActions = parseActions(
+          insight.video_play_actions || [],
+          input.attributionWindows
+        );
         const plays = playActions.video_view || 0;
 
         // Parse engagement depth metrics
-        const twoSecActions = parseActions(insight.video_continuous_2_sec_watched_actions || []);
+        const twoSecActions = parseActions(
+          insight.video_continuous_2_sec_watched_actions || [],
+          input.attributionWindows
+        );
         const twoSecViews = twoSecActions.video_view || 0;
 
-        const fifteenSecActions = parseActions(insight.video_15_sec_watched_actions || []);
+        const fifteenSecActions = parseActions(
+          insight.video_15_sec_watched_actions || [],
+          input.attributionWindows
+        );
         const fifteenSecViews = fifteenSecActions.video_view || 0;
 
-        const thirtySecActions = parseActions(insight.video_30_sec_watched_actions || []);
+        const thirtySecActions = parseActions(
+          insight.video_30_sec_watched_actions || [],
+          input.attributionWindows
+        );
         const thirtySecViews = thirtySecActions.video_view || 0;
 
-        const thruplayActions = parseActions(insight.video_thruplay_watched_actions || []);
+        const thruplayActions = parseActions(
+          insight.video_thruplay_watched_actions || [],
+          input.attributionWindows
+        );
         const thruplay = thruplayActions.video_view || 0;
 
         // Parse impressions
