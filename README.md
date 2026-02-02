@@ -6,6 +6,8 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 
 ## Features
 
+### Core Analytics (v1.0)
+
 - **Facebook OAuth Authentication**: Secure login with Facebook for multi-user access
 - **Remote HTTP Access**: StreamableHTTP transport for remote MCP connections
 - **Session Management**: 24-hour sessions with automatic expiry
@@ -20,12 +22,44 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 - **Docker Support**: Containerized deployment with health checks
 - **Production Ready**: Environment-based configuration, security best practices
 
+### Video Interpretation (v1.1)
+
+- **AI-Powered Creative Analysis**: Analyze video ad creative content using Gemini AI
+  - Scene-by-scene breakdown with visual elements
+  - Text overlay detection and categorization
+  - Emotional tone identification (aspirational, urgent, educational, etc.)
+  - Creative approach classification (problem-solution, testimonial, lifestyle, etc.)
+  - Key message extraction
+
+- **Intelligent Caching**: Firestore-based result caching
+  - Cache by video ID (same video across multiple ads)
+  - Configurable TTL (default: 24 hours)
+  - Automatic cost savings tracking
+  - Cache hit/miss status in responses
+
+- **Performance Correlation**: Connect creative insights with metrics
+  - Identify top-performing emotional tones
+  - Compare creative approach effectiveness
+  - Find similar high-performing ads
+  - Analyze key message patterns
+
+- **Conversational Analysis**: Natural language queries through Claude Code
+  - "Which emotional tone performs best?"
+  - "Find ads similar to my top performer"
+  - "What creative elements drive highest CTR?"
+
 ## Prerequisites
 
 - Node.js 24+ (or Docker)
 - Meta/Facebook Developer Account
 - Meta Ad Account with active campaigns
 - Facebook App with OAuth configured
+
+### Google Cloud Services (for v1.1 Video Interpretation)
+
+- **Google Cloud Storage**: Video file storage
+- **Firestore**: Analysis result caching
+- **Gemini API or Vertex AI**: Video content analysis
 
 ## Quick Setup for Claude Code (10 Seconds)
 
@@ -220,11 +254,26 @@ Add to your `~/.config/claude-code/mcp.json`:
 
 ### 7. Test in Claude Code
 
+#### Basic Analytics Queries
 ```
 You: "Show me campaign performance for last 7 days"
 You: "What's my best performing video ad?"
 You: "Compare this week vs last week performance"
 ```
+
+#### Video Creative Analysis (v1.1)
+```
+User: "Analyze the video creative for ad 123456789"
+# Returns: scenes, text overlays, emotional tone, creative approach
+
+User: "Show last 30 days performance with video analysis"
+# Returns: metrics + creative insights for each video ad
+
+User: "Which emotional tone drives best CTR?"
+# Returns: creative-performance correlation analysis
+```
+
+See [Video Interpretation Guide](docs/video-interpretation-guide.md) for detailed workflows.
 
 ## API Endpoints
 
@@ -348,6 +397,25 @@ See `.env.example` for full documentation. Key variables:
 - `SESSION_SECRET` - Random secret for cookie signing (min 32 chars)
 - `SESSION_TTL` - Session duration in milliseconds (default: `86400000` = 24 hours)
 
+### Video Interpretation (v1.1)
+```bash
+# Google Cloud configuration
+GOOGLE_SERVICE_ACCOUNT_JSON=<service-account-key-json>
+GCP_PROJECT_ID=<your-gcp-project-id>
+GCS_BUCKET_NAME=<your-gcs-bucket-name>
+
+# Gemini AI (choose API key OR Vertex AI)
+GEMINI_API_KEY=<your-gemini-api-key>  # Option 1: API key
+# OR
+GEMINI_USE_VERTEX_AI=true              # Option 2: Vertex AI
+GEMINI_PROJECT_ID=<gcp-project-id>
+GEMINI_REGION=us-central1
+
+# Caching and cost controls
+FIRESTORE_CACHE_TTL_HOURS=24
+GEMINI_MAX_COST_PER_VIDEO=0.10
+```
+
 ## Security Considerations
 
 1. **HTTPS in Production**: Always use HTTPS in production environments
@@ -454,12 +522,30 @@ For issues or questions:
 
 ## Roadmap
 
-Future enhancements (post-MVP):
+### Completed Milestones
+
+- ✅ **v1.0 Core Analytics** - Meta Marketing API integration with OAuth
+  - 10 comprehensive analytics tools
+  - Custom conversion tracking
+  - Ad creative text analysis
+  - Docker deployment with health checks
+
+- ✅ **v1.1 Video Interpretation** - AI-powered creative analysis (COMPLETE)
+  - ✅ Phase 11: Google Cloud Foundation (GCS + Firestore)
+  - ✅ Phase 12: Video Download Pipeline (Meta → GCS)
+  - ✅ Phase 13: Gemini API Integration (AI analysis)
+  - ✅ Phase 14: Analysis MCP Tool (analyze-video-creative)
+  - ✅ Phase 15: Caching Layer (Firestore with TTL)
+  - ✅ Phase 16: Existing Tool Enhancement (video analysis flag)
+  - ✅ Phase 17: Performance Correlation (creative insights)
+  - ✅ Phase 18: Testing & Documentation
+
+### Future Enhancements
 
 - [ ] Budget management tools (write operations)
 - [ ] Audit trail logging
 - [ ] Anomaly detection in metrics
-- [ ] Query result caching
+- [ ] Query result caching for performance data
 - [ ] Redis session store for scalability
 - [ ] CLI tool for automatic cookie extraction
 - [ ] Browser extension for easier setup
