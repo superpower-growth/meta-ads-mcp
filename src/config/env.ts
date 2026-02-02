@@ -46,6 +46,32 @@ const envSchema = z.object({
     .optional()
     .default('86400000')
     .transform((val) => parseInt(val, 10)),
+
+  // Google Cloud Platform Configuration (optional - for video interpretation features)
+  GOOGLE_SERVICE_ACCOUNT_JSON: z
+    .string()
+    .optional()
+    .refine((val) => {
+      if (!val) return true; // Optional field
+      try {
+        JSON.parse(val);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'Invalid JSON format for GOOGLE_SERVICE_ACCOUNT_JSON'),
+  GCS_BUCKET_NAME: z
+    .string()
+    .default('meta-ads-videos'),
+  FIRESTORE_CACHE_TTL_HOURS: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .default(24),
+  GCP_PROJECT_ID: z
+    .string()
+    .optional(),
 });
 
 // Parse and validate environment variables
@@ -62,6 +88,10 @@ const parseEnv = () => {
       FACEBOOK_CALLBACK_URL: process.env.FACEBOOK_CALLBACK_URL,
       SESSION_SECRET: process.env.SESSION_SECRET,
       SESSION_TTL: process.env.SESSION_TTL,
+      GOOGLE_SERVICE_ACCOUNT_JSON: process.env.GOOGLE_SERVICE_ACCOUNT_JSON,
+      GCS_BUCKET_NAME: process.env.GCS_BUCKET_NAME,
+      FIRESTORE_CACHE_TTL_HOURS: process.env.FIRESTORE_CACHE_TTL_HOURS,
+      GCP_PROJECT_ID: process.env.GCP_PROJECT_ID,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
