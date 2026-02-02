@@ -101,6 +101,54 @@ EMOTIONAL & CREATIVE ANALYSIS:
 Format your response as structured JSON matching the schema provided.`;
 
 /**
+ * Retry configuration interface
+ */
+interface RetryOptions {
+  maxRetries: number;
+  baseDelayMs: number;
+}
+
+/**
+ * Retry an operation with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  options: RetryOptions = { maxRetries: 3, baseDelayMs: 1000 }
+): Promise<T> {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= options.maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+
+      // Check if error is retryable
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isRateLimit = errorMessage.includes('429') || errorMessage.includes('quota');
+      const isServerError = errorMessage.includes('500') || errorMessage.includes('503');
+
+      if (!isRateLimit && !isServerError) {
+        // Not a transient error, don't retry
+        throw error;
+      }
+
+      if (attempt === options.maxRetries) {
+        // Final attempt failed
+        throw error;
+      }
+
+      // Exponential backoff
+      const delayMs = options.baseDelayMs * Math.pow(2, attempt - 1);
+      console.warn(`Retry attempt ${attempt}/${options.maxRetries} after ${delayMs}ms: ${errorMessage}`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError!;
+}
+
+/**
  * Parse JSON response with markdown code block handling
  */
 function parseJsonResponse(responseText: string): any {
@@ -119,7 +167,69 @@ function parseJsonResponse(responseText: string): any {
 }
 
 /**
- * Analyze video content using Gemini AI
+ * Analyze video content using Gemini AI (internal implementation without retry)
+ *
+ * @param gcsPath - Path to video file in Google Cloud Storage (gs://bucket/path)
+ * @returns Structured analysis of video content
+ * @throws Error if Gemini not enabled or analysis fails
+ */
+async function analyzeVideoInternal(gcsPath: string): Promise<VideoAnalysis> {
+  console.log(`Starting video analysis for: ${gcsPath}`);
+
+  // Upload video to Gemini Files API
+  const uploadedFile = await geminiClient!.files.upload({
+    file: gcsPath,
+    config: {
+      mimeType: 'video/mp4'
+    }
+  });
+
+  console.log(`Video uploaded to Files API: ${uploadedFile.uri}`);
+
+  // Generate analysis with structured output
+  const response = await geminiClient!.models.generateContent({
+    model: geminiConfig.model,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            fileData: {
+              mimeType: uploadedFile.mimeType,
+              fileUri: uploadedFile.uri
+            }
+          },
+          {
+            text: ANALYSIS_PROMPT
+          }
+        ]
+      }
+    ],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: geminiAnalysisSchema
+    }
+  });
+
+  // Extract response text
+  const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!responseText) {
+    throw new Error('No response text from Gemini API');
+  }
+
+  console.log(`Received analysis response (${responseText.length} chars)`);
+
+  // Parse and validate response
+  const parsed = parseJsonResponse(responseText);
+  const validated = VideoAnalysisSchema.parse(parsed);
+
+  console.log(`Analysis completed: ${validated.scenes.length} scenes, ${validated.textOverlays.length} text overlays`);
+
+  return validated;
+}
+
+/**
+ * Analyze video content using Gemini AI with retry logic
  *
  * @param gcsPath - Path to video file in Google Cloud Storage (gs://bucket/path)
  * @returns Structured analysis of video content
@@ -131,58 +241,11 @@ export async function analyzeVideo(gcsPath: string): Promise<VideoAnalysis> {
   }
 
   try {
-    console.log(`Starting video analysis for: ${gcsPath}`);
-
-    // Upload video to Gemini Files API
-    const uploadedFile = await geminiClient!.files.upload({
-      file: gcsPath,
-      config: {
-        mimeType: 'video/mp4'
-      }
-    });
-
-    console.log(`Video uploaded to Files API: ${uploadedFile.uri}`);
-
-    // Generate analysis with structured output
-    const response = await geminiClient!.models.generateContent({
-      model: geminiConfig.model,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              fileData: {
-                mimeType: uploadedFile.mimeType,
-                fileUri: uploadedFile.uri
-              }
-            },
-            {
-              text: ANALYSIS_PROMPT
-            }
-          ]
-        }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: geminiAnalysisSchema
-      }
-    });
-
-    // Extract response text
-    const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!responseText) {
-      throw new Error('No response text from Gemini API');
-    }
-
-    console.log(`Received analysis response (${responseText.length} chars)`);
-
-    // Parse and validate response
-    const parsed = parseJsonResponse(responseText);
-    const validated = VideoAnalysisSchema.parse(parsed);
-
-    console.log(`Analysis completed: ${validated.scenes.length} scenes, ${validated.textOverlays.length} text overlays`);
-
-    return validated;
+    // Wrap analysis in retry logic
+    return await retryWithBackoff(
+      () => analyzeVideoInternal(gcsPath),
+      { maxRetries: 3, baseDelayMs: 2000 } // 2s, 4s, 8s backoff
+    );
   } catch (error) {
     // Enhanced error logging
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -226,6 +289,31 @@ export function estimateAnalysisCost(videoDurationSeconds: number): number {
                (outputTokens / 1_000_000) * pricing.output;
 
   return cost;
+}
+
+/**
+ * Analyze video with cost guard to prevent expensive analyses
+ *
+ * @param gcsPath - Path to video file in Google Cloud Storage (gs://bucket/path)
+ * @param videoDurationSeconds - Duration of video in seconds
+ * @returns Structured analysis of video content
+ * @throws Error if estimated cost exceeds maximum or analysis fails
+ */
+export async function analyzeVideoWithCostGuard(
+  gcsPath: string,
+  videoDurationSeconds: number
+): Promise<VideoAnalysis> {
+  const estimatedCost = estimateAnalysisCost(videoDurationSeconds);
+
+  if (estimatedCost > env.GEMINI_MAX_COST_PER_ANALYSIS) {
+    throw new Error(
+      `Estimated analysis cost ($${estimatedCost.toFixed(4)}) exceeds maximum ($${env.GEMINI_MAX_COST_PER_ANALYSIS}). ` +
+      `Video duration: ${videoDurationSeconds}s. Consider using lower resolution or adjusting GEMINI_MAX_COST_PER_ANALYSIS.`
+    );
+  }
+
+  console.log(`Estimated analysis cost: $${estimatedCost.toFixed(4)} for ${videoDurationSeconds}s video (model: ${geminiConfig.model})`);
+  return analyzeVideo(gcsPath);
 }
 
 // Export schema for external use
