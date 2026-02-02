@@ -328,6 +328,15 @@ export const getAdPerformanceTool: Tool = {
           'Include action value amounts (purchase value, etc.) for custom actions',
         default: false,
       },
+      attributionWindows: {
+        type: 'array' as const,
+        items: {
+          type: 'string' as const,
+          enum: ['1d_click', '7d_click', '28d_click', '1d_view'],
+        },
+        description: 'Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view',
+        default: ['7d_click', '1d_view'],
+      },
     },
   },
 };
