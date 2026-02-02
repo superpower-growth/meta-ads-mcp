@@ -350,7 +350,7 @@ export async function getAdPerformance(args: unknown): Promise<string> {
 export const getAdPerformanceTool: Tool = {
   name: 'get-ad-performance',
   description:
-    'Query individual ad creative performance metrics including CTR, CPC, ROAS, custom conversions (subscription_created, etc.), and video completion rates for a specified date range. Supports both preset date ranges and custom date ranges for all-time analysis.',
+    'Query individual ad creative performance metrics including CTR, CPC, ROAS, custom conversions (subscription_created, etc.), and video completion rates for a specified date range. Optionally include AI-powered video creative analysis (scenes, text overlays, emotional tone) when includeVideoAnalysis=true. Video analysis returns cached results only (use analyze-video-creative tool to analyze videos first). Supports both preset date ranges and custom date ranges for all-time analysis.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -425,6 +425,11 @@ export const getAdPerformanceTool: Tool = {
         },
         description: 'Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view',
         default: ['7d_click', '1d_view'],
+      },
+      includeVideoAnalysis: {
+        type: 'boolean' as const,
+        description: 'Include AI-powered video creative analysis (cached results only, returns cache miss message if not yet analyzed)',
+        default: false,
       },
     },
   },
