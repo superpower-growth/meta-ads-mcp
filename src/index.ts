@@ -25,6 +25,7 @@ import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import { AccessTokenStore } from './auth/device-flow.js';
 import { storage, firestore, isGcpEnabled } from './lib/gcp-clients.js';
+import { isGeminiEnabled, geminiConfig } from './lib/gemini-client.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
 import { getCampaignPerformance } from './tools/get-campaign-performance.js';
@@ -242,6 +243,7 @@ async function main() {
       timestamp: new Date().toISOString(),
       gcs: {},
       firestore: {},
+      gemini: {},
     };
 
     // Check GCS connectivity
@@ -291,6 +293,24 @@ async function main() {
           error: message,
         };
       }
+    }
+
+    // Check Gemini AI status
+    if (!isGeminiEnabled()) {
+      healthResponse.gemini = {
+        enabled: false,
+        reason: env.GEMINI_USE_VERTEX_AI
+          ? 'Vertex AI mode but GCP not configured'
+          : 'GEMINI_API_KEY not configured'
+      };
+    } else {
+      healthResponse.gemini = {
+        enabled: true,
+        mode: geminiConfig.useVertexAI ? 'vertex-ai' : 'api-key',
+        model: geminiConfig.model,
+        maxCostPerAnalysis: env.GEMINI_MAX_COST_PER_ANALYSIS,
+        accessible: true // Assume accessible if client initialized
+      };
     }
 
     res.json(healthResponse);
