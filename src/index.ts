@@ -37,6 +37,7 @@ import { getVideoEngagement } from './tools/get-video-engagement.js';
 import { compareTimePeriods } from './tools/compare-time-periods.js';
 import { compareEntities } from './tools/compare-entities.js';
 import { getAdCreativeText } from './tools/get-ad-creative-text.js';
+import { analyzeVideoCreative } from './tools/analyze-video-creative.js';
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -174,6 +175,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'get-ad-creative-text': {
         const result = await getAdCreativeText(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+      case 'analyze-video-creative': {
+        const result = await analyzeVideoCreative(args as any);
         return {
           content: [
             {
