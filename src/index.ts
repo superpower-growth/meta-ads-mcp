@@ -241,6 +241,7 @@ async function main() {
       version: '0.1.0',
       timestamp: new Date().toISOString(),
       gcs: {},
+      firestore: {},
     };
 
     // Check GCS connectivity
@@ -263,6 +264,30 @@ async function main() {
         healthResponse.gcs = {
           enabled: true,
           bucket: env.GCS_BUCKET_NAME,
+          error: message,
+        };
+      }
+    }
+
+    // Check Firestore connectivity
+    if (!isGcpEnabled) {
+      healthResponse.firestore = {
+        enabled: false,
+        reason: 'No credentials configured',
+      };
+    } else {
+      try {
+        await firestore!.collection('video_analysis_cache').limit(1).get();
+        healthResponse.firestore = {
+          enabled: true,
+          collection: 'video_analysis_cache',
+          accessible: true,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        healthResponse.firestore = {
+          enabled: true,
+          collection: 'video_analysis_cache',
           error: message,
         };
       }
