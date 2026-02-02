@@ -24,7 +24,12 @@ axiosRetry(axios, {
            (error.response?.status ?? 0) >= 500; // Server errors
   },
   onRetry: (retryCount, error, requestConfig) => {
-    console.warn(`Retry attempt ${retryCount} for ${requestConfig.url}: ${error.message}`);
+    const status = error.response?.status;
+    if (status === 429) {
+      console.warn(`Rate limit hit - retrying with exponential backoff (attempt ${retryCount}/3)`);
+    } else {
+      console.warn(`Retry attempt ${retryCount}/3 for ${requestConfig.url}: ${error.message}`);
+    }
   }
 });
 
@@ -116,32 +121,53 @@ export async function downloadAndUploadVideo(adId: string): Promise<string | nul
     console.log(`Downloading video ${metadata.videoId} for ad ${adId} from Meta API`);
 
     // Download video with streaming
-    const response = await axios({
-      method: 'GET',
-      url: metadata.videoUrl,
-      responseType: 'stream',
-      timeout: 60000, // 60 second timeout for large videos
-      maxContentLength: 200 * 1024 * 1024, // 200MB max (Meta's upload limit)
-    });
+    let response;
+    try {
+      response = await axios({
+        method: 'GET',
+        url: metadata.videoUrl,
+        responseType: 'stream',
+        timeout: 60000, // 60 second timeout for large videos
+        maxContentLength: 200 * 1024 * 1024, // 200MB max (Meta's upload limit)
+      });
+    } catch (error: any) {
+      // Enhanced error handling for download failures
+      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+        throw new Error(`Video download timeout for ad ${adId}, video ${metadata.videoId}: Network timeout after 60 seconds. Video may be too large or network connection is slow.`);
+      } else if (error.response?.status === 403 || error.response?.status === 404) {
+        throw new Error(`Video URL may have expired for ad ${adId}, video ${metadata.videoId}: ${error.response.status} response. Video URLs from Meta are temporary and must be downloaded immediately.`);
+      } else {
+        throw new Error(`Failed to download video for ad ${adId}, video ${metadata.videoId}: ${error.message}`);
+      }
+    }
 
     // Upload to GCS with metadata
-    const gcsPath = await uploadVideo(
-      response.data,
-      adId,
-      metadata.videoId,
-      {
-        contentType: 'video/mp4',
-        metadata: {
-          duration: metadata.duration.toString(),
-          thumbnailUrl: metadata.thumbnailUrl,
+    try {
+      const gcsPath = await uploadVideo(
+        response.data,
+        adId,
+        metadata.videoId,
+        {
+          contentType: 'video/mp4',
+          metadata: {
+            duration: metadata.duration.toString(),
+            thumbnailUrl: metadata.thumbnailUrl,
+          }
         }
-      }
-    );
+      );
 
-    console.log(`Video ${metadata.videoId} for ad ${adId} uploaded to ${gcsPath}`);
-    return gcsPath;
+      console.log(`Video ${metadata.videoId} for ad ${adId} uploaded to ${gcsPath}`);
+      return gcsPath;
+    } catch (error: any) {
+      throw new Error(`Failed to upload video to GCS for ad ${adId}, video ${metadata.videoId}: ${error.message}`);
+    }
   } catch (error) {
+    // Re-throw if already a detailed error from above
+    if (error instanceof Error && error.message.includes('ad ' + adId)) {
+      throw error;
+    }
+    // Generic fallback
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to download and upload video for ad ${adId}: ${message}`);
+    throw new Error(`Unexpected error processing video for ad ${adId}: ${message}`);
   }
 }
