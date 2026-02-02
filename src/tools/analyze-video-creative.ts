@@ -35,10 +35,13 @@ interface AnalyzeVideoCreativeResponse {
   adId: string;
   videoId: string | null;
   analysis: VideoAnalysis | null;
+  cacheStatus?: 'hit' | 'miss' | 'unavailable';
   metadata?: {
     duration: number;
     thumbnailUrl: string;
     gcsPath: string;
+    cachedAt?: Date;
+    hitCount?: number;
   };
   message?: string; // For non-video ads or errors
 }
@@ -67,6 +70,7 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
         adId: args.adId,
         videoId: null,
         analysis: null,
+        cacheStatus: 'unavailable',
         message: 'Gemini AI not configured. Please set GEMINI_API_KEY or configure Vertex AI.'
       };
       return JSON.stringify(response, null, 2);
@@ -110,6 +114,7 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
         adId: args.adId,
         videoId: metadata.videoId,
         analysis: cachedEntry.analysisResults,
+        cacheStatus: 'hit',
       };
 
       if (args.includeMetadata) {
@@ -117,6 +122,8 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
           duration: metadata.duration,
           thumbnailUrl: metadata.thumbnailUrl,
           gcsPath: cachedEntry.gcsPath,
+          cachedAt: cachedEntry.createdAt,
+          hitCount: cachedEntry.hitCount,
         };
       }
 
@@ -260,6 +267,7 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
       adId: args.adId,
       videoId: metadata.videoId,
       analysis,
+      cacheStatus: 'miss',
     };
 
     if (args.includeMetadata) {
