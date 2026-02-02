@@ -27,12 +27,15 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 - Meta Ad Account with active campaigns
 - Facebook App with OAuth configured
 
-## Quick Setup for Claude Code (30 Seconds)
+## Quick Setup for Claude Code (10 Seconds)
 
-**Use the hosted Railway instance - no installation needed!**
+**Just add this one line - Claude handles authentication automatically!**
+
+### Step 1: Add to Claude Code
+
+Edit `~/.config/claude-code/mcp.json`:
 
 ```json
-// Add to ~/.config/claude-code/mcp.json:
 {
   "mcpServers": {
     "meta-ads": {
@@ -43,13 +46,19 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 }
 ```
 
-**That's it!** The server is already running on Railway. Just add it to Claude Code and start asking questions:
+### Step 2: Use It!
 
+In Claude Code, try asking:
 ```
 "Show me campaign performance for last 7 days"
-"What's my best performing video ad?"
-"Compare this week vs last week"
 ```
+
+Claude will automatically:
+1. 🔐 Prompt you to authenticate with Facebook
+2. 🚀 Handle the OAuth flow
+3. ✅ Start querying your Meta Ads data
+
+**That's it!** No manual OAuth setup, no cookies, no installation. Claude handles everything.
 
 ---
 
@@ -88,8 +97,9 @@ npm start
 **Best for:** Everyone who just wants to use it with Claude Code
 
 - ✅ Already deployed and running
-- ✅ No setup required
+- ✅ Claude handles OAuth automatically
 - ✅ Just add the URL to Claude Code settings
+- ✅ No cookies, no manual authentication
 - URL: `https://meta-ads-mcp-production-3b99.up.railway.app/mcp`
 
 ### 2. Run Locally (Development)
