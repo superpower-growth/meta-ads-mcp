@@ -41,6 +41,10 @@ const GetVideoEngagementSchema = z.object({
     .boolean()
     .default(true)
     .describe('Include weak point identification (drop-offs >20%)'),
+  attributionWindows: z
+    .array(z.enum(['1d_click', '7d_click', '28d_click', '1d_view']))
+    .default(['7d_click', '1d_view'])
+    .describe('Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view'),
 });
 
 type GetVideoEngagementInput = z.infer<typeof GetVideoEngagementSchema>;
@@ -111,6 +115,7 @@ export async function getVideoEngagement(args: unknown): Promise<string> {
       date_preset: input.dateRange,
       level: input.level,
       time_increment: 'all_days' as const, // Single aggregated result per entity
+      action_attribution_windows: input.attributionWindows,
     };
 
     // Query insights from Meta API
@@ -285,6 +290,15 @@ export const getVideoEngagementTool: Tool = {
         type: 'boolean' as const,
         description: 'Include weak point identification (drop-offs >20%)',
         default: true,
+      },
+      attributionWindows: {
+        type: 'array' as const,
+        items: {
+          type: 'string' as const,
+          enum: ['1d_click', '7d_click', '28d_click', '1d_view'],
+        },
+        description: 'Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view',
+        default: ['7d_click', '1d_view'],
       },
     },
   },

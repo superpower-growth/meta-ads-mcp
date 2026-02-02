@@ -37,6 +37,10 @@ const GetVideoDemographicsSchema = z.object({
     .min(1)
     .default(['age', 'gender'])
     .describe('Demographic breakdown dimensions (WARNING: combinations multiply rows)'),
+  attributionWindows: z
+    .array(z.enum(['1d_click', '7d_click', '28d_click', '1d_view']))
+    .default(['7d_click', '1d_view'])
+    .describe('Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view'),
 });
 
 type GetVideoDemographicsInput = z.infer<typeof GetVideoDemographicsSchema>;
@@ -100,6 +104,7 @@ export async function getVideoDemographics(args: unknown): Promise<string> {
       level: input.level,
       time_increment: 'all_days' as const, // Single aggregated result per breakdown
       breakdowns: input.breakdowns,
+      action_attribution_windows: input.attributionWindows,
     };
 
     // Query insights from Meta API
@@ -248,6 +253,15 @@ export const getVideoDemographicsTool: Tool = {
         description:
           'Demographic breakdown dimensions (WARNING: combinations multiply rows)',
         default: ['age', 'gender'],
+      },
+      attributionWindows: {
+        type: 'array' as const,
+        items: {
+          type: 'string' as const,
+          enum: ['1d_click', '7d_click', '28d_click', '1d_view'],
+        },
+        description: 'Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view',
+        default: ['7d_click', '1d_view'],
       },
     },
   },
