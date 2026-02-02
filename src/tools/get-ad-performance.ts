@@ -14,6 +14,10 @@ import { MetricsService } from '../meta/metrics.js';
 import { parseRoas, parseActions } from '../lib/parsers.js';
 import { resolveActionType } from '../lib/custom-conversions.js';
 import { env } from '../config/env.js';
+import { getVideoMetadata } from '../lib/video-downloader.js';
+import { getCached } from '../lib/firestore-cache.js';
+import { type VideoAnalysis } from '../lib/gemini-analyzer.js';
+import { isGeminiEnabled } from '../lib/gemini-client.js';
 
 /**
  * Custom date range schema
@@ -71,6 +75,10 @@ const GetAdPerformanceSchema = z.object({
     .array(z.enum(['1d_click', '7d_click', '28d_click', '1d_view']))
     .default(['7d_click', '1d_view'])
     .describe('Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view'),
+  includeVideoAnalysis: z
+    .boolean()
+    .default(false)
+    .describe('Include AI-powered video creative analysis using Gemini (adds scenes, text overlays, emotional tone, creative approach)'),
 });
 
 type GetAdPerformanceInput = z.infer<typeof GetAdPerformanceSchema>;
@@ -85,6 +93,12 @@ interface AdPerformance {
     name: string;
     period: string;
     metrics: Record<string, number>;
+    videoCreative?: {
+      videoId: string | null;
+      analysis: VideoAnalysis | null;
+      cacheStatus?: 'hit' | 'miss' | 'unavailable';
+      message?: string;
+    };
   }>;
 }
 
