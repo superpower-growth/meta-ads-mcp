@@ -6,16 +6,27 @@
  *
  * Critical patterns from DISCOVERY.md:
  * - Use getInsights(fields, params) where fields is string[] and params is object
- * - Common params: {date_preset, level, time_increment, limit}
+ * - Common params: {date_preset, level, time_increment, limit, action_attribution_windows}
  * - Response is array of insight objects with date_start, date_stop, and requested metrics
- * - DO NOT use deprecated attribution windows (action_attribution_windows) - will return empty data silently
+ *
+ * Attribution Windows (Updated January 2026):
+ * - Supported: 1d_click, 7d_click, 28d_click, 1d_view
+ * - Removed: 7d_view, 28d_view (returns empty data as of Jan 12, 2026)
+ * - Default if not specified: 7d_click, 1d_view
  *
  * @see https://developers.facebook.com/docs/marketing-api/insights
+ * @see https://ppc.land/meta-restricts-attribution-windows-and-data-retention-in-ads-insights-api/
  */
 
 import { AdAccount, Campaign, AdSet, Ad, FacebookAdsApi } from 'facebook-nodejs-business-sdk';
 import { api } from './client.js';
 import { env } from '../config/env.js';
+
+/**
+ * Supported attribution windows as of January 2026
+ * Note: 7d_view and 28d_view were removed by Meta on January 12, 2026
+ */
+export type AttributionWindow = '1d_click' | '7d_click' | '28d_click' | '1d_view';
 
 /**
  * Insight query parameters
@@ -30,6 +41,7 @@ export interface InsightParams {
   time_increment?: number | 'monthly' | 'all_days';
   limit?: number;
   breakdowns?: string[];
+  action_attribution_windows?: AttributionWindow[];
   [key: string]: any;
 }
 

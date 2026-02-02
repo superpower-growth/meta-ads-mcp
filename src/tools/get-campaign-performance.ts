@@ -16,7 +16,7 @@ import { env } from '../config/env.js';
 /**
  * Input schema for get-campaign-performance tool
  *
- * Validates date range, optional campaign ID filter, and metric selection.
+ * Validates date range, optional campaign ID filter, metric selection, and attribution windows.
  */
 const GetCampaignPerformanceSchema = z.object({
   dateRange: z
@@ -41,6 +41,10 @@ const GetCampaignPerformanceSchema = z.object({
     )
     .default(['impressions', 'clicks', 'spend', 'ctr', 'cpc'])
     .describe('Metrics to include in response'),
+  attributionWindows: z
+    .array(z.enum(['1d_click', '7d_click', '28d_click', '1d_view']))
+    .default(['7d_click', '1d_view'])
+    .describe('Attribution windows for conversion tracking. Options: 1d_click (1-day click), 7d_click (7-day click, default), 28d_click (28-day click), 1d_view (1-day view). Note: 7d_view and 28d_view were removed by Meta on Jan 12, 2026.'),
 });
 
 type GetCampaignPerformanceInput = z.infer<typeof GetCampaignPerformanceSchema>;
@@ -77,6 +81,7 @@ export async function getCampaignPerformance(args: unknown): Promise<string> {
       date_preset: input.dateRange,
       level: 'campaign' as const,
       time_increment: 'all_days' as const, // Single aggregated result per campaign
+      action_attribution_windows: input.attributionWindows,
     };
 
     // Query insights from Meta API
@@ -183,6 +188,15 @@ export const getCampaignPerformanceTool: Tool = {
         },
         description: 'Metrics to include in response',
         default: ['impressions', 'clicks', 'spend', 'ctr', 'cpc'],
+      },
+      attributionWindows: {
+        type: 'array' as const,
+        items: {
+          type: 'string' as const,
+          enum: ['1d_click', '7d_click', '28d_click', '1d_view'],
+        },
+        description: 'Attribution windows for conversion tracking. Options: 1d_click (1-day click), 7d_click (7-day click, default), 28d_click (28-day click), 1d_view (1-day view). Note: 7d_view and 28d_view were removed by Meta on Jan 12, 2026.',
+        default: ['7d_click', '1d_view'],
       },
     },
   },

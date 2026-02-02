@@ -67,6 +67,10 @@ const GetAdPerformanceSchema = z.object({
     .boolean()
     .default(false)
     .describe('Include action value amounts (purchase value, etc.)'),
+  attributionWindows: z
+    .array(z.enum(['1d_click', '7d_click', '28d_click', '1d_view']))
+    .default(['7d_click', '1d_view'])
+    .describe('Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view'),
 });
 
 type GetAdPerformanceInput = z.infer<typeof GetAdPerformanceSchema>;
@@ -126,6 +130,7 @@ export async function getAdPerformance(args: unknown): Promise<string> {
     const params: any = {
       level: 'ad' as const,
       time_increment: 'all_days' as const, // Single aggregated result per ad
+      action_attribution_windows: input.attributionWindows,
     };
 
     // Handle date range (preset or custom)

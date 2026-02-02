@@ -42,6 +42,10 @@ const GetAdsetPerformanceSchema = z.object({
     )
     .default(['impressions', 'clicks', 'spend', 'ctr', 'cpc'])
     .describe('Metrics to include in response'),
+  attributionWindows: z
+    .array(z.enum(['1d_click', '7d_click', '28d_click', '1d_view']))
+    .default(['7d_click', '1d_view'])
+    .describe('Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view'),
 });
 
 type GetAdsetPerformanceInput = z.infer<typeof GetAdsetPerformanceSchema>;
@@ -78,6 +82,7 @@ export async function getAdsetPerformance(args: unknown): Promise<string> {
       date_preset: input.dateRange,
       level: 'adset' as const,
       time_increment: 'all_days' as const, // Single aggregated result per ad set
+      action_attribution_windows: input.attributionWindows,
     };
 
     // Query insights from Meta API
@@ -184,6 +189,15 @@ export const getAdsetPerformanceTool: Tool = {
         },
         description: 'Metrics to include in response',
         default: ['impressions', 'clicks', 'spend', 'ctr', 'cpc'],
+      },
+      attributionWindows: {
+        type: 'array' as const,
+        items: {
+          type: 'string' as const,
+          enum: ['1d_click', '7d_click', '28d_click', '1d_view'],
+        },
+        description: 'Attribution windows for conversion tracking. Options: 1d_click, 7d_click (default), 28d_click, 1d_view',
+        default: ['7d_click', '1d_view'],
       },
     },
   },
