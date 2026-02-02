@@ -105,8 +105,12 @@ interface AdPerformance {
 /**
  * Query ad performance metrics from Meta Insights API
  *
- * @param args - Tool arguments (dateRange, adId, metrics)
- * @returns Pretty-printed JSON with ad metrics
+ * Optionally enriches response with video creative analysis when includeVideoAnalysis=true.
+ * Video analysis returns cached results only (no on-demand analysis in performance queries).
+ * Use analyze-video-creative tool to analyze videos first, then query performance with enrichment.
+ *
+ * @param args - Tool arguments (dateRange, adId, metrics, includeVideoAnalysis)
+ * @returns Pretty-printed JSON with ad metrics and optional video creative insights
  */
 export async function getAdPerformance(args: unknown): Promise<string> {
   // Validate input
@@ -260,6 +264,74 @@ export async function getAdPerformance(args: unknown): Promise<string> {
         };
       }),
     };
+
+    // Optionally enrich with video creative analysis
+    if (input.includeVideoAnalysis) {
+      console.log(`Video analysis enrichment requested for ${response.ads.length} ad(s)`);
+
+      // Check if Gemini is configured
+      if (!isGeminiEnabled()) {
+        console.warn('Video analysis requested but Gemini not configured');
+        // Add warning to first ad only (avoid spam)
+        if (response.ads.length > 0) {
+          response.ads[0].videoCreative = {
+            videoId: null,
+            analysis: null,
+            message: 'Gemini AI not configured. Set GEMINI_API_KEY or configure Vertex AI.',
+          };
+        }
+      } else {
+        // Analyze each ad's video creative
+        for (const ad of response.ads) {
+          try {
+            // Get video metadata to check if it's a video ad
+            const metadata = await getVideoMetadata(ad.id);
+
+            if (!metadata) {
+              // Not a video ad
+              ad.videoCreative = {
+                videoId: null,
+                analysis: null,
+                message: 'Not a video ad',
+              };
+              continue;
+            }
+
+            // Check cache first
+            const cachedEntry = await getCached(metadata.videoId);
+
+            if (cachedEntry) {
+              // Cache hit
+              ad.videoCreative = {
+                videoId: metadata.videoId,
+                analysis: cachedEntry.analysisResults,
+                cacheStatus: 'hit',
+              };
+              console.log(`Cache HIT for video ${metadata.videoId} in ad ${ad.id}`);
+            } else {
+              // Cache miss - skip analysis in performance query to avoid long delays
+              // User should use analyze-video-creative tool directly for first analysis
+              ad.videoCreative = {
+                videoId: metadata.videoId,
+                analysis: null,
+                cacheStatus: 'miss',
+                message: 'Video not analyzed yet. Use analyze-video-creative tool to analyze first.',
+              };
+              console.log(`Cache MISS for video ${metadata.videoId} in ad ${ad.id} - skipping analysis in performance query`);
+            }
+          } catch (error) {
+            // Don't fail the entire query if video analysis fails
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.warn(`Failed to analyze video for ad ${ad.id}:`, errorMessage);
+            ad.videoCreative = {
+              videoId: null,
+              analysis: null,
+              message: `Video analysis failed: ${errorMessage}`,
+            };
+          }
+        }
+      }
+    }
 
     // Return pretty-printed JSON for Claude consumption
     return JSON.stringify(response, null, 2);
