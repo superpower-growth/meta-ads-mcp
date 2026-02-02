@@ -19,12 +19,10 @@ import {
 import crypto from 'crypto';
 import { env } from './config/env.js';
 import { getSessionConfig } from './auth/session.js';
-import { requireAuth, requireAuthForToolCall } from './middleware/auth.js';
+import { requireAuthForToolCall } from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
-import deviceRoutes from './routes/device.js';
 import oauthRoutes from './routes/oauth.js';
-import { DeviceCodeStore, AccessTokenStore } from './auth/device-flow.js';
-import { TokenCleanupService } from './lib/token-cleanup.js';
+import { AccessTokenStore } from './auth/device-flow.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
 import { getCampaignPerformance } from './tools/get-campaign-performance.js';
@@ -35,6 +33,7 @@ import { getVideoDemographics } from './tools/get-video-demographics.js';
 import { getVideoEngagement } from './tools/get-video-engagement.js';
 import { compareTimePeriods } from './tools/compare-time-periods.js';
 import { compareEntities } from './tools/compare-entities.js';
+import { getAdCreativeText } from './tools/get-ad-creative-text.js';
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -170,6 +169,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
+      case 'get-ad-creative-text': {
+        const result = await getAdCreativeText(args as any);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -189,14 +199,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
- * Initialize device flow stores
+ * Initialize access token store
  */
-const deviceCodeStore = new DeviceCodeStore();
 const accessTokenStore = new AccessTokenStore();
-const cleanupService = new TokenCleanupService(deviceCodeStore, accessTokenStore);
 
-// Make stores globally accessible
-global.deviceCodeStore = deviceCodeStore;
+// Make store globally accessible
 global.accessTokenStore = accessTokenStore;
 
 /**
@@ -213,6 +220,7 @@ async function main() {
 
   // Middleware
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true })); // For OAuth token requests
   app.use(session(getSessionConfig()));
 
   // Health check endpoint (no auth required)
@@ -229,9 +237,6 @@ async function main() {
 
   // Auth routes
   app.use('/auth', authRoutes);
-
-  // Device flow routes
-  app.use('/auth/device', deviceRoutes);
 
   // MCP transport with session-based authentication
   const transport = new StreamableHTTPServerTransport({
@@ -259,16 +264,13 @@ async function main() {
   const httpServer = app.listen(PORT, HOST, () => {
     console.error(`Meta Ads MCP server running on http://${HOST}:${PORT}`);
     console.error(`Health check: http://${HOST}:${PORT}/health`);
-    console.error(`Login: http://${HOST}:${PORT}/auth/facebook`);
-    console.error(`Device flow: http://${HOST}:${PORT}/auth/device`);
+    console.error(`OAuth: http://${HOST}:${PORT}/authorize`);
     console.error(`Environment: ${env.NODE_ENV}`);
   });
 
   // Graceful shutdown
   process.on('SIGTERM', () => {
     console.error('SIGTERM received, shutting down gracefully...');
-    cleanupService.destroy();
-    deviceCodeStore.destroy();
     accessTokenStore.destroy();
     httpServer.close(() => {
       console.error('HTTP server closed');
@@ -278,8 +280,6 @@ async function main() {
 
   process.on('SIGINT', () => {
     console.error('SIGINT received, shutting down gracefully...');
-    cleanupService.destroy();
-    deviceCodeStore.destroy();
     accessTokenStore.destroy();
     httpServer.close(() => {
       console.error('HTTP server closed');

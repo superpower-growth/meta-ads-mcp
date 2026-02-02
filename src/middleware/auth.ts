@@ -2,8 +2,8 @@
  * Authentication Middleware
  *
  * Protects routes by requiring valid authentication.
- * Supports both Bearer token (device flow) and session cookie authentication.
- * Returns 401 Unauthorized with device flow instructions if user is not authenticated.
+ * Supports Bearer token (OAuth) authentication.
+ * Returns 401 Unauthorized if user is not authenticated.
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -24,25 +24,24 @@ declare global {
 }
 
 /**
- * Send device flow challenge response in JSONRPC format
+ * Send authentication required response in JSONRPC format
  */
-function sendDeviceFlowChallenge(res: Response): void {
+function sendAuthRequired(req: Request, res: Response): void {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+
   res.status(401).json({
     jsonrpc: '2.0',
     error: {
       code: -32001,
-      message: 'Authentication required. Please authenticate using device flow.',
+      message: 'Authentication required',
       data: {
         authentication: {
-          type: 'device_flow',
-          endpoint: '/auth/device/code',
-          instructions: [
-            '1. POST to /auth/device/code to get device code',
-            '2. Visit verification_uri and enter user_code',
-            '3. Poll /auth/device/token until authorized',
-            '4. Use access_token in Authorization: Bearer header',
-          ],
-          loginUrl: '/auth/facebook',
+          type: 'oauth2',
+          oauth_authorization_server: `${baseUrl}/.well-known/oauth-authorization-server`,
+          authorization_endpoint: `${baseUrl}/authorize`,
+          token_endpoint: `${baseUrl}/token`,
+          registration_endpoint: `${baseUrl}/register`,
+          instructions: 'Use /mcp command in Claude Code to authenticate, or visit the authorization_endpoint',
         },
       },
     },
@@ -55,7 +54,7 @@ function sendDeviceFlowChallenge(res: Response): void {
  * Returns user data if authenticated, null otherwise
  */
 function checkAuth(req: Request): { userId: string; email: string; name: string } | null {
-  // Priority 1: Check Bearer token (device flow)
+  // Check Bearer token
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
@@ -73,31 +72,11 @@ function checkAuth(req: Request): { userId: string; email: string; name: string 
     }
   }
 
-  // Priority 2: Check session cookie (traditional flow)
-  if (req.session?.userId) {
-    // Check if session has expired
-    if (req.session.expiresAt && new Date() > new Date(req.session.expiresAt)) {
-      req.session.destroy((err) => {
-        if (err) {
-          console.error('Error destroying expired session:', err);
-        }
-      });
-      return null;
-    }
-
-    return {
-      userId: req.session.userId,
-      email: req.session.email || '',
-      name: req.session.name || '',
-    };
-  }
-
   return null;
 }
 
 /**
  * Middleware to require authentication for protected routes
- * Supports both Bearer token (Priority 1) and session cookie (Priority 2)
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const user = checkAuth(req);
@@ -107,15 +86,22 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return next();
   }
 
-  // Unauthenticated: Return device flow instructions
-  sendDeviceFlowChallenge(res);
+  // Unauthenticated
+  sendAuthRequired(req, res);
 }
 
 /**
  * Middleware for MCP endpoints that allows tool discovery without auth
  * but requires auth for tool execution
+ *
+ * Can be disabled for local development by setting REQUIRE_AUTH=false
  */
 export function requireAuthForToolCall(req: Request, res: Response, next: NextFunction): void {
+  // Skip auth if REQUIRE_AUTH=false (local development mode)
+  if (process.env.REQUIRE_AUTH === 'false') {
+    return next();
+  }
+
   const user = checkAuth(req);
 
   if (user) {
@@ -145,7 +131,7 @@ export function requireAuthForToolCall(req: Request, res: Response, next: NextFu
 
       // Require auth for tool calls
       if (body.method === 'tools/call') {
-        return sendDeviceFlowChallenge(res);
+        return sendAuthRequired(req, res);
       }
     } catch (error) {
       // Invalid JSON, allow it through (MCP will handle the error)

@@ -27,9 +27,15 @@ coverage/
 # Planning and temporary files
 .planning/
 query-*.ts
+analysis/
 
 # Local development scripts
 *.local.*
+
+# Test and debug scripts
+test-*.ts
+debug-*.ts
+analyze-*.ts
 
 # Claude Code configuration
 .claude.json

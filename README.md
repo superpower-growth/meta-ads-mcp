@@ -1,15 +1,19 @@
 # Meta Ads MCP Server
 
-A remote Model Context Protocol (MCP) server that provides authenticated access to Meta Marketing API for video ad analytics. Built with Facebook OAuth authentication for secure multi-user access.
+A Model Context Protocol (MCP) server that provides access to Meta Marketing API for comprehensive ad analytics. Use the hosted instance with Claude Code in 30 seconds, or run your own.
+
+**🚀 Live Instance:** `https://meta-ads-mcp-production-3b99.up.railway.app/mcp`
 
 ## Features
 
 - **Facebook OAuth Authentication**: Secure login with Facebook for multi-user access
 - **Remote HTTP Access**: StreamableHTTP transport for remote MCP connections
 - **Session Management**: 24-hour sessions with automatic expiry
-- **9 Analytics Tools**: Comprehensive video ad performance analytics
+- **10 Analytics Tools**: Comprehensive ad performance analytics
   - Account information
   - Campaign, Ad Set, and Ad performance metrics
+  - **Custom conversion tracking** (subscription_created, registration_started, etc.)
+  - **Ad creative text analysis** for content categorization
   - Video performance and engagement tracking
   - Demographic insights
   - Time period and entity comparisons
@@ -22,6 +26,93 @@ A remote Model Context Protocol (MCP) server that provides authenticated access 
 - Meta/Facebook Developer Account
 - Meta Ad Account with active campaigns
 - Facebook App with OAuth configured
+
+## Quick Setup for Claude Code (30 Seconds)
+
+**Use the hosted Railway instance - no installation needed!**
+
+```json
+// Add to ~/.config/claude-code/mcp.json:
+{
+  "mcpServers": {
+    "meta-ads": {
+      "url": "https://meta-ads-mcp-production-3b99.up.railway.app/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
+**That's it!** The server is already running on Railway. Just add it to Claude Code and start asking questions:
+
+```
+"Show me campaign performance for last 7 days"
+"What's my best performing video ad?"
+"Compare this week vs last week"
+```
+
+---
+
+## Alternative: Run Locally
+
+If you want to run your own instance (for development or customization):
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/superpower-growth/meta-ads-mcp.git
+cd meta-ads-mcp
+./setup.sh
+
+# 2. Edit .env and add your Meta credentials:
+#    - META_ACCESS_TOKEN (from Graph API Explorer)
+#    - META_AD_ACCOUNT_ID (format: act_123456789)
+#    - REQUIRE_AUTH=false (for local use)
+
+# 3. Start the server
+npm start
+
+# 4. Update Claude Code to use localhost:
+{
+  "mcpServers": {
+    "meta-ads": {
+      "url": "http://localhost:3000/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
+## Three Ways to Use This
+
+### 1. Hosted Railway Instance (Easiest - Recommended)
+**Best for:** Everyone who just wants to use it with Claude Code
+
+- ✅ Already deployed and running
+- ✅ No setup required
+- ✅ Just add the URL to Claude Code settings
+- URL: `https://meta-ads-mcp-production-3b99.up.railway.app/mcp`
+
+### 2. Run Locally (Development)
+**Best for:** Developers customizing the code
+
+- 🛠️ Full control over code and configuration
+- 🛠️ Test changes before deployment
+- 🛠️ Requires Node.js installation
+- Set `REQUIRE_AUTH=false` in `.env`
+
+### 3. Deploy Your Own Instance (Advanced)
+**Best for:** Teams needing their own private deployment
+
+- 🔐 Your own Railway/cloud deployment
+- 🔐 Can enable OAuth for multi-user access
+- 🔐 Full control over environment and data
+- See deployment section below
+
+---
+
+## Detailed Setup (Production Mode with OAuth)
+
+If you need multi-user access or production deployment, follow these steps:
 
 ## Quick Start
 
@@ -96,8 +187,6 @@ docker-compose down
 3. After successful login, open **Browser DevTools** (F12)
 4. Navigate to **Application → Cookies**
 5. Find and copy the `connect.sid` cookie value
-
-![Cookie extraction example](https://i.imgur.com/example.png)
 
 ### 6. Configure Claude Code
 
@@ -178,11 +267,51 @@ All tools are accessible via Claude Code once authenticated:
 2. **get-campaign-performance** - Campaign-level metrics and performance
 3. **get-adset-performance** - Ad Set-level performance data
 4. **get-ad-performance** - Individual ad performance metrics
-5. **get-video-performance** - Video-specific performance metrics
-6. **get-video-demographics** - Audience demographic breakdowns
-7. **get-video-engagement** - Video engagement metrics (watch time, completion)
-8. **compare-time-periods** - Compare performance across time periods
-9. **compare-entities** - Compare multiple campaigns/adsets/ads
+   - ✨ **Enhanced**: Custom conversion support (subscription_created, etc.)
+   - ✨ **Enhanced**: Custom date ranges for all-time analysis
+   - ✨ **Enhanced**: Cost-per-action calculations for custom events
+5. **get-ad-creative-text** - Retrieve ad creative text for content analysis
+   - Extract primary text, headline, and description
+   - Supports both link_data and video_data structures
+   - Enable keyword-based ad categorization
+6. **get-video-performance** - Video-specific performance metrics
+7. **get-video-demographics** - Audience demographic breakdowns
+8. **get-video-engagement** - Video engagement metrics (watch time, completion)
+9. **compare-time-periods** - Compare performance across time periods
+10. **compare-entities** - Compare multiple campaigns/adsets/ads
+
+### Ad Classification Library
+
+Built-in keyword-based categorization for ads:
+- **Symptom ads**: tired, fatigue, brain fog, heart health, etc.
+- **Comparison ads**: vs, versus, compared to, better than
+- **FSA/HSA ads**: fsa eligible, hsa eligible, tax advantage
+- **Product explainer**: how it works, science behind, ingredients
+
+Easily customizable in `src/lib/ad-classification.ts`
+
+## Custom Conversions
+
+Configure your custom conversion events in `src/lib/custom-conversions.ts`:
+
+```typescript
+export const CUSTOM_CONVERSION_MAP: Record<string, string> = {
+  subscription_created: 'offsite_conversion.custom.797731396203109',
+  registration_started: 'offsite_conversion.custom.1382332960167482',
+  // Add your custom conversions here
+};
+```
+
+**How to find your conversion IDs:**
+1. Go to Meta Events Manager
+2. Select your Pixel
+3. Click on a custom event
+4. The ID is in the URL: `events_manager/pixel/{pixel_id}/event/{event_id}`
+
+Then use friendly names in your queries:
+```
+get-ad-performance with customActions=["subscription_created"]
+```
 
 ## Environment Variables
 
@@ -196,6 +325,9 @@ See `.env.example` for full documentation. Key variables:
 - `HOST` - Server bind address (default: `0.0.0.0`)
 - `PORT` - Server port (default: `3000`)
 - `NODE_ENV` - Environment mode (`development`, `production`, `test`)
+- `REQUIRE_AUTH` - Authentication mode (default: `true`)
+  - `false` - **Local mode**: Uses `META_ACCESS_TOKEN` directly, no OAuth needed
+  - `true` - **Production mode**: Requires Facebook OAuth login
 
 ### Facebook OAuth
 - `FACEBOOK_APP_ID` - From Facebook App Settings
@@ -307,8 +439,8 @@ MIT
 ## Support
 
 For issues or questions:
-- GitHub Issues: [Your repo URL]
-- Documentation: [Your docs URL]
+- GitHub Issues: [https://github.com/superpower-growth/meta-ads-mcp/issues](https://github.com/superpower-growth/meta-ads-mcp/issues)
+- Documentation: See [README.md](https://github.com/superpower-growth/meta-ads-mcp#readme)
 
 ## Roadmap
 

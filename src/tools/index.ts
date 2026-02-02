@@ -15,6 +15,7 @@ import { getVideoDemographicsTool } from './get-video-demographics.js';
 import { getVideoEngagementTool } from './get-video-engagement.js';
 import { compareTimePeriodsTool } from './compare-time-periods.js';
 import { compareEntitiesTool } from './compare-entities.js';
+import { getAdCreativeTextTool } from './get-ad-creative-text.js';
 
 /**
  * All available MCP tools
@@ -29,4 +30,5 @@ export const tools: Tool[] = [
   getVideoEngagementTool,
   compareTimePeriodsTool,
   compareEntitiesTool,
+  getAdCreativeTextTool,
 ];

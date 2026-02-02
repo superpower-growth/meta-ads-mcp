@@ -27,6 +27,13 @@ declare module 'express-session' {
     email?: string;
     name?: string;
     expiresAt?: Date;
+    authRequest?: {
+      clientId: string;
+      redirectUri: string;
+      state?: string;
+      codeChallenge?: string;
+      codeChallengeMethod?: string;
+    };
   }
 }
 

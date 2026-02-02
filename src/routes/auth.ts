@@ -9,9 +9,10 @@
  */
 
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { getAuthorizationUrl, handleOAuthCallback } from '../auth/facebook-oauth.js';
-import { getSessionExpiry } from '../auth/session.js';
 import { requireAuth } from '../middleware/auth.js';
+import { authorizationCodes } from './oauth.js';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get('/facebook', (req: Request, res: Response) => {
  * Handle OAuth callback from Facebook
  */
 router.get('/callback', async (req: Request, res: Response) => {
-  const { code, state, error, error_description } = req.query;
+  const { code, error, error_description } = req.query;
 
   // Handle OAuth errors
   if (error) {
@@ -52,210 +53,52 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Exchange code for user profile
     const user = await handleOAuthCallback(code);
 
-    // Device flow: state = "device:<deviceCode>"
-    if (state && typeof state === 'string' && state.startsWith('device:')) {
-      const deviceCode = state.substring(7); // Extract device code
+    // OAuth Authorization Code flow
+    const authRequest = req.session.authRequest;
 
-      try {
-        // Authorize the device code with user data
-        await global.deviceCodeStore.authorize(deviceCode, {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        });
-
-        // Return success page for device flow
-        return res.send(`
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Authorization Successful</title>
-            <style>
-              * { margin: 0; padding: 0; box-sizing: border-box; }
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 20px;
-              }
-              .container {
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                padding: 40px;
-                max-width: 480px;
-                width: 100%;
-                text-align: center;
-              }
-              .checkmark {
-                width: 80px;
-                height: 80px;
-                border-radius: 50%;
-                background: #5cb85c;
-                margin: 0 auto 24px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
-              .checkmark svg {
-                width: 50px;
-                height: 50px;
-                fill: white;
-              }
-              h1 {
-                color: #333;
-                font-size: 28px;
-                margin-bottom: 12px;
-              }
-              .subtitle {
-                color: #666;
-                font-size: 16px;
-                margin-bottom: 24px;
-              }
-              .user-info {
-                background: #f8f9fa;
-                border-radius: 8px;
-                padding: 16px;
-                margin-bottom: 24px;
-              }
-              .user-info p {
-                color: #555;
-                margin: 4px 0;
-              }
-              .user-info strong {
-                color: #333;
-              }
-              .message {
-                color: #666;
-                font-size: 14px;
-                line-height: 1.6;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="checkmark">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
-              </div>
-              <h1>Device Authorized!</h1>
-              <p class="subtitle">Authentication successful</p>
-              <div class="user-info">
-                <p><strong>${user.name}</strong></p>
-                <p>${user.email}</p>
-              </div>
-              <p class="message">
-                You can now close this window and return to Claude Code.<br>
-                Your MCP client is authenticated and ready to use.
-              </p>
-            </div>
-          </body>
-          </html>
-        `);
-      } catch (error) {
-        console.error('Device flow authorization error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-            <head><title>Authorization Failed</title></head>
-            <body>
-              <h1>Authorization Failed</h1>
-              <p>Error: ${errorMessage}</p>
-              <p><a href="/auth/device">Try again</a></p>
-            </body>
-          </html>
-        `);
-      }
-    }
-
-    // Traditional flow (existing logic)
-    req.session.userId = user.id;
-    req.session.email = user.email;
-    req.session.name = user.name;
-    req.session.expiresAt = getSessionExpiry();
-
-    console.log('Creating session for user:', { userId: user.id, name: user.name });
-
-    // Save session and redirect
-    req.session.save((err) => {
-      if (err) {
-        console.error('Error saving session:', err);
-        return res.status(500).json({
-          error: 'Session creation failed',
-          message: 'Failed to create user session',
-        });
-      }
-
-      console.log('Session saved successfully. Session ID:', req.sessionID);
-      console.log('Cookie will be sent with name: connect.sid');
-
-      // Redirect to success page
-      res.send(`
+    if (!authRequest) {
+      return res.status(400).send(`
         <!DOCTYPE html>
         <html>
-          <head>
-            <title>Login Successful</title>
-            <style>
-              body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-              .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; }
-              .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 15px; border-radius: 5px; margin-top: 20px; }
-              code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; word-break: break-all; }
-              pre { background: #f4f4f4; padding: 10px; border-radius: 3px; overflow-x: auto; }
-              .copy-btn { background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px; }
-              .copy-btn:hover { background: #0056b3; }
-            </style>
-          </head>
-          <body>
-            <h1>Login Successful!</h1>
-            <div class="success">
-              <p><strong>Welcome, ${user.name}!</strong></p>
-              <p>You have successfully authenticated with Facebook.</p>
-              <p>Email: ${user.email}</p>
-            </div>
-            <div class="info">
-              <h3>🍪 Get Your Session Cookie</h3>
-              <p><strong>The cookie has been set! Now extract it:</strong></p>
-              <ol style="text-align: left; margin: 15px 0;">
-                <li>Press <strong>F12</strong> to open DevTools</li>
-                <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong></li>
-                <li>Click on: <code style="font-size: 11px;">https://meta-ads-mcp-production-3b99.up.railway.app</code></li>
-                <li>Find <strong>connect.sid</strong> and copy its <strong>Value</strong></li>
-                <li>The value should start with <code>s:</code> (this is the signed cookie!)</li>
-              </ol>
-              <p style="margin-top: 15px; font-size: 14px;"><strong>Important:</strong> You need the FULL cookie value including the signature (starts with "s:").</p>
-            </div>
-            <div class="info">
-              <h3>Next Steps: Configure Claude Code</h3>
-              <ol>
-                <li>Open your browser's Developer Tools (F12)</li>
-                <li>Go to <strong>Application → Cookies</strong></li>
-                <li>Find and copy the <code>connect.sid</code> cookie value</li>
-                <li>Update your <code>~/.config/claude-code/mcp.json</code>:</li>
-              </ol>
-              <pre>{
-  "mcpServers": {
-    "meta-ads": {
-      "url": "http://localhost:3000/mcp",
-      "transport": "http",
-      "headers": {
-        "Cookie": "connect.sid=YOUR_SESSION_COOKIE"
-      }
-    }
-  }
-}</pre>
-              <p><strong>Session expires in 24 hours.</strong> Repeat this process to renew.</p>
-            </div>
+          <head><title>Invalid Request</title></head>
+          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+            <h1>Invalid OAuth Request</h1>
+            <p>No authorization request found. Please try again.</p>
+            <p><a href="/">Go to homepage</a></p>
           </body>
         </html>
       `);
+    }
+
+    // Generate authorization code
+    const authorizationCode = crypto.randomBytes(32).toString('hex');
+
+    // Store authorization code with user info
+    authorizationCodes.set(authorizationCode, {
+      code: authorizationCode,
+      clientId: authRequest.clientId,
+      redirectUri: authRequest.redirectUri,
+      codeChallenge: authRequest.codeChallenge,
+      codeChallengeMethod: authRequest.codeChallengeMethod,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      userId: user.id,
+      email: user.email,
+      name: user.name,
     });
+
+    // Clear auth request from session
+    delete req.session.authRequest;
+
+    // Redirect back to client with authorization code
+    const redirectUrl = new URL(authRequest.redirectUri);
+    redirectUrl.searchParams.set('code', authorizationCode);
+    if (authRequest.state) {
+      redirectUrl.searchParams.set('state', authRequest.state);
+    }
+
+    console.log('[OAuth Callback] Authorization successful for:', user.email);
+    console.log('[OAuth Callback] Redirecting to:', redirectUrl.toString());
+    return res.redirect(redirectUrl.toString());
   } catch (error) {
     console.error('OAuth callback error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -296,7 +139,6 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
     userId: req.user?.userId,
     email: req.user?.email,
     name: req.user?.name,
-    expiresAt: req.session?.expiresAt,
   });
 });
 
