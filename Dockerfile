@@ -1,5 +1,4 @@
 # Multi-stage build for Meta Ads MCP Server
-# Build timestamp: 2026-02-03T17:27:00Z
 
 # Stage 1: Build
 FROM node:24-alpine AS builder

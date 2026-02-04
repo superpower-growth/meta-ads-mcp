@@ -251,7 +251,7 @@ async function main() {
   app.get('/health', async (_req, res) => {
     const healthResponse: any = {
       status: 'ok',
-      version: '0.1.1-test',
+      version: '0.1.0',
       timestamp: new Date().toISOString(),
       gcs: {},
       firestore: {},
