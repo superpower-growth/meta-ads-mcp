@@ -32,10 +32,11 @@ analysis/
 # Local development scripts
 *.local.*
 
-# Test and debug scripts
+# Test and debug scripts (in root or analysis directory only)
 test-*.ts
 debug-*.ts
-analyze-*.ts
+/analyze-*.ts
+/analysis/analyze-*.ts
 
 # Claude Code configuration
 .claude.json
