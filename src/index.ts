@@ -380,10 +380,18 @@ async function main() {
   // Parse body first, then check auth
   const mcpBodyParser = express.text({ type: '*/*' });
   app.post('/mcp', mcpBodyParser, requireAuthForToolCall, async (req, res) => {
+    let method = 'unknown';
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      method = body?.method || 'unknown';
+    } catch (e) {
+      // Ignore parsing errors in logging
+    }
+
     console.log('[MCP] POST /mcp request received', {
       authenticated: !!req.user,
       userId: req.user?.userId,
-      method: req.body ? JSON.parse(req.body).method : 'unknown',
+      method,
       headers: {
         authorization: req.headers.authorization ? 'present' : 'missing',
       },
