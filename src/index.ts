@@ -374,7 +374,15 @@ async function main() {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
-    await transport.handleRequest(req, res);
+    try {
+      await transport.handleRequest(req, res);
+      console.log('[MCP] GET /mcp SSE connection handled');
+    } catch (error) {
+      console.error('[MCP] GET /mcp error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
   });
 
   // Parse body first, then check auth
@@ -397,7 +405,15 @@ async function main() {
       },
     });
 
-    await transport.handleRequest(req, res, req.body);
+    try {
+      await transport.handleRequest(req, res, req.body);
+      console.log('[MCP] POST /mcp response sent successfully for method:', method);
+    } catch (error) {
+      console.error('[MCP] POST /mcp error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
   });
 
   // Start HTTP server
