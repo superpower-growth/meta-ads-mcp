@@ -33,7 +33,7 @@ function sendAuthRequired(req: Request, res: Response): void {
     jsonrpc: '2.0',
     error: {
       code: -32001,
-      message: 'Authentication required',
+      message: 'Authentication required. Please restart Claude Code after authenticating.',
       data: {
         authentication: {
           type: 'oauth2',
@@ -41,7 +41,7 @@ function sendAuthRequired(req: Request, res: Response): void {
           authorization_endpoint: `${baseUrl}/authorize`,
           token_endpoint: `${baseUrl}/token`,
           registration_endpoint: `${baseUrl}/register`,
-          instructions: 'Use /mcp command in Claude Code to authenticate, or visit the authorization_endpoint',
+          instructions: 'Use /mcp command in Claude Code to authenticate. After authentication completes, restart Claude Code for the connection to refresh.',
         },
       },
     },

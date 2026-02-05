@@ -237,6 +237,16 @@ global.accessTokenStore = accessTokenStore;
  * Start MCP server with HTTP transport and OAuth authentication
  */
 async function main() {
+  // Initialize connection registry
+  const { MCPConnectionRegistry } = await import('./mcp/connection-registry.js');
+  const mcpConnectionRegistry = new MCPConnectionRegistry();
+  global.mcpConnectionRegistry = mcpConnectionRegistry;
+
+  // Cleanup stale connections every 5 minutes
+  setInterval(() => {
+    mcpConnectionRegistry.cleanup();
+  }, 5 * 60 * 1000);
+
   // Load persisted tokens from Firestore
   console.log('[Startup] Loading persisted access tokens from Firestore...');
   await accessTokenStore.loadFromFirestore();
@@ -367,6 +377,21 @@ async function main() {
       headers: {
         authorization: req.headers.authorization ? 'present' : 'missing',
       },
+    });
+
+    // Register connection if authenticated
+    let connectionId: string | undefined;
+    if (req.user) {
+      connectionId = mcpConnectionRegistry.register(req.user.userId, res);
+      console.log('[MCP] SSE connection registered:', connectionId);
+    }
+
+    // Handle connection close
+    req.on('close', () => {
+      if (connectionId) {
+        mcpConnectionRegistry.unregister(connectionId);
+        console.log('[MCP] SSE connection closed:', connectionId);
+      }
     });
 
     // Set SSE headers for long-lived connections

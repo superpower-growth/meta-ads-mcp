@@ -193,6 +193,12 @@ export class DeviceCodeStore {
       await global.accessTokenStore.set(accessToken, tokenData);
     }
 
+    // Terminate existing connections for this user to force reconnection with new token
+    if (global.mcpConnectionRegistry) {
+      const terminatedCount = global.mcpConnectionRegistry.terminateByUserId(userData.id);
+      console.log(`[Device Flow] Terminated ${terminatedCount} stale connections for user:`, userData.id);
+    }
+
     return accessToken;
   }
 
@@ -288,34 +294,55 @@ export class AccessTokenStore {
       const now = new Date();
       let loadedCount = 0;
       let expiredCount = 0;
+      const expiredTokens: string[] = [];
 
       for (const doc of snapshot.docs) {
-        const data = doc.data();
-        const token = doc.id;
+        try {
+          const data = doc.data();
+          const token = doc.id;
 
-        // Convert Firestore Timestamp to Date
-        const expiresAt = data.expiresAt?.toDate() || new Date(data.expiresAt);
-        const createdAt = data.createdAt?.toDate() || new Date(data.createdAt);
+          // Convert Firestore Timestamp to Date
+          const expiresAt = data.expiresAt?.toDate() || new Date(data.expiresAt);
+          const createdAt = data.createdAt?.toDate() || new Date(data.createdAt);
 
-        // Skip expired tokens
-        if (now > expiresAt) {
-          expiredCount++;
-          // Delete expired token from Firestore
-          await doc.ref.delete();
-          continue;
+          // Skip expired tokens
+          if (now > expiresAt) {
+            expiredCount++;
+            expiredTokens.push(token);
+            continue;
+          }
+
+          const tokenData: AccessTokenData = {
+            userId: data.userId,
+            email: data.email,
+            name: data.name,
+            expiresAt,
+            deviceCode: data.deviceCode,
+            createdAt,
+          };
+
+          // Validate required fields
+          if (!tokenData.userId || !tokenData.email || !tokenData.name) {
+            console.error(`[AccessTokenStore] Invalid token data in Firestore: ${token}`);
+            continue;
+          }
+
+          this.tokens.set(token, tokenData);
+          loadedCount++;
+        } catch (error) {
+          console.error(`[AccessTokenStore] Failed to load token ${doc.id}:`, error);
+          // Continue loading other tokens
         }
+      }
 
-        const tokenData: AccessTokenData = {
-          userId: data.userId,
-          email: data.email,
-          name: data.name,
-          expiresAt,
-          deviceCode: data.deviceCode,
-          createdAt,
-        };
-
-        this.tokens.set(token, tokenData);
-        loadedCount++;
+      // Batch delete expired tokens
+      if (expiredTokens.length > 0) {
+        const batch = firestore.batch();
+        for (const token of expiredTokens) {
+          batch.delete(firestore.collection(this.collectionName).doc(token));
+        }
+        await batch.commit();
+        console.log(`[AccessTokenStore] Deleted ${expiredTokens.length} expired tokens from Firestore`);
       }
 
       console.log(`[AccessTokenStore] Loaded ${loadedCount} tokens from Firestore (cleaned ${expiredCount} expired)`);
@@ -475,4 +502,5 @@ export class AccessTokenStore {
 declare global {
   var deviceCodeStore: DeviceCodeStore;
   var accessTokenStore: AccessTokenStore;
+  var mcpConnectionRegistry: import('../mcp/connection-registry.js').MCPConnectionRegistry;
 }

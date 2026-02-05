@@ -215,6 +215,12 @@ router.post('/token', async (req: Request, res: Response) => {
     createdAt: new Date(),
   });
 
+  // Terminate all existing MCP connections for this user to force reconnection with new token
+  if (global.mcpConnectionRegistry) {
+    const terminatedCount = global.mcpConnectionRegistry.terminateByUserId(authCode.userId!);
+    console.log(`[OAuth Token] Terminated ${terminatedCount} stale connections for user:`, authCode.userId);
+  }
+
   console.log('[OAuth Token] Access token issued for:', {
     clientId: authCode.clientId,
     userId: authCode.userId,
