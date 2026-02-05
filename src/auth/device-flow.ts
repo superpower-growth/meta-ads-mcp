@@ -334,14 +334,21 @@ export class AccessTokenStore {
     // Persist to Firestore if enabled
     if (this.isFirestoreEnabled && firestore) {
       try {
-        await firestore.collection(this.collectionName).doc(token).set({
+        // Build Firestore document, excluding undefined fields
+        const firestoreData: any = {
           userId: data.userId,
           email: data.email,
           name: data.name,
           expiresAt: data.expiresAt,
-          deviceCode: data.deviceCode,
           createdAt: data.createdAt,
-        });
+        };
+
+        // Only include deviceCode if it's defined
+        if (data.deviceCode !== undefined) {
+          firestoreData.deviceCode = data.deviceCode;
+        }
+
+        await firestore.collection(this.collectionName).doc(token).set(firestoreData);
         console.log(`[AccessTokenStore] Persisted token to Firestore for user: ${data.email}`);
       } catch (error) {
         console.error('[AccessTokenStore] Failed to persist token to Firestore:', error);
