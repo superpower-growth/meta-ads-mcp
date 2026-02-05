@@ -361,6 +361,14 @@ async function main() {
 
   // MCP endpoints (allow tool discovery, require auth for tool calls)
   app.get('/mcp', requireAuthForToolCall, async (req, res) => {
+    console.log('[MCP] GET /mcp request received', {
+      authenticated: !!req.user,
+      userId: req.user?.userId,
+      headers: {
+        authorization: req.headers.authorization ? 'present' : 'missing',
+      },
+    });
+
     // Set SSE headers for long-lived connections
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -372,6 +380,15 @@ async function main() {
   // Parse body first, then check auth
   const mcpBodyParser = express.text({ type: '*/*' });
   app.post('/mcp', mcpBodyParser, requireAuthForToolCall, async (req, res) => {
+    console.log('[MCP] POST /mcp request received', {
+      authenticated: !!req.user,
+      userId: req.user?.userId,
+      method: req.body ? JSON.parse(req.body).method : 'unknown',
+      headers: {
+        authorization: req.headers.authorization ? 'present' : 'missing',
+      },
+    });
+
     await transport.handleRequest(req, res, req.body);
   });
 
