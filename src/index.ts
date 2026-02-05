@@ -237,6 +237,11 @@ global.accessTokenStore = accessTokenStore;
  * Start MCP server with HTTP transport and OAuth authentication
  */
 async function main() {
+  // Load persisted tokens from Firestore
+  console.log('[Startup] Loading persisted access tokens from Firestore...');
+  await accessTokenStore.loadFromFirestore();
+  console.log('[Startup] Access tokens loaded');
+
   const app = express();
 
   // Trust Railway proxy for secure cookies

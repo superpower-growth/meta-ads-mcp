@@ -118,7 +118,7 @@ router.get('/authorize', (req: Request, res: Response) => {
  * OAuth 2.0 Token endpoint
  * Exchanges authorization code for access token
  */
-router.post('/token', (req: Request, res: Response) => {
+router.post('/token', async (req: Request, res: Response) => {
   const { grant_type, code, redirect_uri, client_id, code_verifier } = req.body;
 
   // Validate grant type
@@ -207,7 +207,7 @@ router.post('/token', (req: Request, res: Response) => {
   const accessToken = generateAccessToken();
 
   // Store access token
-  global.accessTokenStore.set(accessToken, {
+  await global.accessTokenStore.set(accessToken, {
     userId: authCode.userId!,
     email: authCode.email!,
     name: authCode.name!,

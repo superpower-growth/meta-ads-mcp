@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { firestore, isGcpEnabled } from '../lib/gcp-clients.js';
 
 /**
  * Device code data structure for OAuth device flow
@@ -189,7 +190,7 @@ export class DeviceCodeStore {
 
     // Store in global access token store
     if (global.accessTokenStore) {
-      global.accessTokenStore.set(accessToken, tokenData);
+      await global.accessTokenStore.set(accessToken, tokenData);
     }
 
     return accessToken;
@@ -258,22 +259,95 @@ export class DeviceCodeStore {
 }
 
 /**
- * In-memory store for access tokens
+ * Persistent store for access tokens with Firestore backing
+ * Tokens survive server restarts when Firestore is enabled
  */
 export class AccessTokenStore {
   private tokens: Map<string, AccessTokenData> = new Map();
   private cleanupInterval: NodeJS.Timeout;
+  private collectionName = 'access_tokens';
+  private isFirestoreEnabled: boolean;
 
   constructor() {
+    this.isFirestoreEnabled = isGcpEnabled;
     // Run cleanup every 5 minutes
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
   /**
-   * Store an access token
+   * Load tokens from Firestore on startup
    */
-  set(token: string, data: AccessTokenData): void {
+  async loadFromFirestore(): Promise<void> {
+    if (!this.isFirestoreEnabled || !firestore) {
+      console.log('[AccessTokenStore] Firestore not enabled, using in-memory only');
+      return;
+    }
+
+    try {
+      const snapshot = await firestore.collection(this.collectionName).get();
+      const now = new Date();
+      let loadedCount = 0;
+      let expiredCount = 0;
+
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        const token = doc.id;
+
+        // Convert Firestore Timestamp to Date
+        const expiresAt = data.expiresAt?.toDate() || new Date(data.expiresAt);
+        const createdAt = data.createdAt?.toDate() || new Date(data.createdAt);
+
+        // Skip expired tokens
+        if (now > expiresAt) {
+          expiredCount++;
+          // Delete expired token from Firestore
+          await doc.ref.delete();
+          continue;
+        }
+
+        const tokenData: AccessTokenData = {
+          userId: data.userId,
+          email: data.email,
+          name: data.name,
+          expiresAt,
+          deviceCode: data.deviceCode,
+          createdAt,
+        };
+
+        this.tokens.set(token, tokenData);
+        loadedCount++;
+      }
+
+      console.log(`[AccessTokenStore] Loaded ${loadedCount} tokens from Firestore (cleaned ${expiredCount} expired)`);
+    } catch (error) {
+      console.error('[AccessTokenStore] Failed to load from Firestore:', error);
+      // Continue with in-memory only mode
+    }
+  }
+
+  /**
+   * Store an access token (persists to Firestore if enabled)
+   */
+  async set(token: string, data: AccessTokenData): Promise<void> {
     this.tokens.set(token, data);
+
+    // Persist to Firestore if enabled
+    if (this.isFirestoreEnabled && firestore) {
+      try {
+        await firestore.collection(this.collectionName).doc(token).set({
+          userId: data.userId,
+          email: data.email,
+          name: data.name,
+          expiresAt: data.expiresAt,
+          deviceCode: data.deviceCode,
+          createdAt: data.createdAt,
+        });
+        console.log(`[AccessTokenStore] Persisted token to Firestore for user: ${data.email}`);
+      } catch (error) {
+        console.error('[AccessTokenStore] Failed to persist token to Firestore:', error);
+        // Continue with in-memory only
+      }
+    }
   }
 
   /**
@@ -289,6 +363,8 @@ export class AccessTokenStore {
     // Check if expired
     if (new Date() > data.expiresAt) {
       this.tokens.delete(token);
+      // Delete from Firestore asynchronously (don't await)
+      this.deleteFromFirestore(token);
       return null;
     }
 
@@ -296,28 +372,67 @@ export class AccessTokenStore {
   }
 
   /**
-   * Revoke an access token
+   * Revoke an access token (removes from Firestore if enabled)
    */
-  revoke(token: string): boolean {
-    return this.tokens.delete(token);
+  async revoke(token: string): Promise<boolean> {
+    const deleted = this.tokens.delete(token);
+
+    // Delete from Firestore if enabled
+    if (deleted && this.isFirestoreEnabled && firestore) {
+      await this.deleteFromFirestore(token);
+    }
+
+    return deleted;
   }
 
   /**
-   * Clean up expired tokens
+   * Delete token from Firestore
    */
-  cleanup(): void {
+  private async deleteFromFirestore(token: string): Promise<void> {
+    if (!this.isFirestoreEnabled || !firestore) {
+      return;
+    }
+
+    try {
+      await firestore.collection(this.collectionName).doc(token).delete();
+      console.log(`[AccessTokenStore] Deleted token from Firestore`);
+    } catch (error) {
+      console.error('[AccessTokenStore] Failed to delete token from Firestore:', error);
+    }
+  }
+
+  /**
+   * Clean up expired tokens (both in-memory and Firestore)
+   */
+  async cleanup(): Promise<void> {
     const now = new Date();
     let cleanedCount = 0;
+    const tokensToDelete: string[] = [];
 
     for (const [token, data] of this.tokens.entries()) {
       if (now > data.expiresAt) {
         this.tokens.delete(token);
+        tokensToDelete.push(token);
         cleanedCount++;
       }
     }
 
     if (cleanedCount > 0) {
-      console.log(`[AccessTokenStore] Cleaned up ${cleanedCount} expired access tokens`);
+      console.log(`[AccessTokenStore] Cleaned up ${cleanedCount} expired access tokens from memory`);
+    }
+
+    // Clean up Firestore asynchronously
+    if (tokensToDelete.length > 0 && this.isFirestoreEnabled && firestore) {
+      try {
+        const batch = firestore.batch();
+        for (const token of tokensToDelete) {
+          batch.delete(firestore.collection(this.collectionName).doc(token));
+        }
+        await batch.commit();
+        console.log(`[AccessTokenStore] Cleaned up ${tokensToDelete.length} expired tokens from Firestore`);
+      } catch (error) {
+        console.error('[AccessTokenStore] Failed to clean up Firestore tokens:', error);
+      }
     }
   }
 
