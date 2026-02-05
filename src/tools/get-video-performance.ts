@@ -103,6 +103,30 @@ export async function getVideoPerformance(args: unknown): Promise<string> {
       fields.push('video_continuous_2_sec_watched_actions');
     }
 
+    // Always include ID and name fields for the specified level
+    if (input.level === 'campaign') {
+      if (!fields.includes('campaign_id' as any)) {
+        fields.push('campaign_id' as any);
+      }
+      if (!fields.includes('campaign_name' as any)) {
+        fields.push('campaign_name' as any);
+      }
+    } else if (input.level === 'adset') {
+      if (!fields.includes('adset_id' as any)) {
+        fields.push('adset_id' as any);
+      }
+      if (!fields.includes('adset_name' as any)) {
+        fields.push('adset_name' as any);
+      }
+    } else if (input.level === 'ad') {
+      if (!fields.includes('ad_id' as any)) {
+        fields.push('ad_id' as any);
+      }
+      if (!fields.includes('ad_name' as any)) {
+        fields.push('ad_name' as any);
+      }
+    }
+
     // Prepare query parameters
     const params = {
       date_preset: input.dateRange,

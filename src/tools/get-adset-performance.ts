@@ -85,8 +85,19 @@ export async function getAdsetPerformance(args: unknown): Promise<string> {
       action_attribution_windows: input.attributionWindows,
     };
 
+    // Determine fields to request
+    const fields = [...input.metrics];
+
+    // Always include adset_id and adset_name for adset-level queries
+    if (!fields.includes('adset_id' as any)) {
+      fields.push('adset_id' as any);
+    }
+    if (!fields.includes('adset_name' as any)) {
+      fields.push('adset_name' as any);
+    }
+
     // Query insights from Meta API with automatic pagination
-    const insights = await metricsService.getAllInsights(input.metrics, params);
+    const insights = await metricsService.getAllInsights(fields, params);
 
     // Filter to specific ad set if requested
     let filteredInsights = insights;

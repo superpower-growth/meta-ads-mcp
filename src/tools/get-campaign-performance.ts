@@ -84,8 +84,19 @@ export async function getCampaignPerformance(args: unknown): Promise<string> {
       action_attribution_windows: input.attributionWindows,
     };
 
+    // Determine fields to request
+    const fields = [...input.metrics];
+
+    // Always include campaign_id and campaign_name for campaign-level queries
+    if (!fields.includes('campaign_id' as any)) {
+      fields.push('campaign_id' as any);
+    }
+    if (!fields.includes('campaign_name' as any)) {
+      fields.push('campaign_name' as any);
+    }
+
     // Query insights from Meta API with automatic pagination
-    const insights = await metricsService.getAllInsights(input.metrics, params);
+    const insights = await metricsService.getAllInsights(fields, params);
 
     // Filter to specific campaign if requested
     let filteredInsights = insights;

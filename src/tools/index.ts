@@ -17,6 +17,7 @@ import { compareTimePeriodsTool } from './compare-time-periods.js';
 import { compareEntitiesTool } from './compare-entities.js';
 import { getAdCreativeTextTool } from './get-ad-creative-text.js';
 import { analyzeVideoCreativeTool } from './analyze-video-creative.js';
+import { getPlacementConversionsTool } from './get-placement-conversions.js';
 
 /**
  * All available MCP tools
@@ -33,4 +34,5 @@ export const tools: Tool[] = [
   compareEntitiesTool,
   getAdCreativeTextTool,
   analyzeVideoCreativeTool,
+  getPlacementConversionsTool,
 ];
