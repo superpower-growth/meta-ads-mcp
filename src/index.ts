@@ -242,10 +242,14 @@ async function main() {
   const mcpConnectionRegistry = new MCPConnectionRegistry();
   global.mcpConnectionRegistry = mcpConnectionRegistry;
 
-  // Cleanup stale connections every 5 minutes
-  setInterval(() => {
-    mcpConnectionRegistry.cleanup();
-  }, 5 * 60 * 1000);
+  // Cleanup disabled - was disconnecting active users after 30 minutes
+  // Connections are cleaned up on:
+  // 1. Normal close (close handler)
+  // 2. New token issuance (terminateByUserId)
+  // 3. Server restart
+  // setInterval(() => {
+  //   mcpConnectionRegistry.cleanup();
+  // }, 5 * 60 * 1000);
 
   // Load persisted tokens from Firestore
   console.log('[Startup] Loading persisted access tokens from Firestore...');
@@ -406,6 +410,12 @@ async function main() {
       console.error('[MCP] GET /mcp error:', error);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });
+      }
+    } finally {
+      // Always cleanup connection, even on error
+      if (connectionId) {
+        mcpConnectionRegistry.unregister(connectionId);
+        console.log('[MCP] SSE connection cleaned up in finally:', connectionId);
       }
     }
   });

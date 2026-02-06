@@ -4,13 +4,11 @@ interface MCPConnection {
   userId: string;
   connectionId: string;
   connectedAt: Date;
-  lastActivity: Date;
   response: Response;
 }
 
 export class MCPConnectionRegistry {
   private connections: Map<string, MCPConnection>;
-  private static readonly STALE_CONNECTION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
     this.connections = new Map();
@@ -29,7 +27,6 @@ export class MCPConnectionRegistry {
       userId,
       connectionId,
       connectedAt: new Date(),
-      lastActivity: new Date(),
       response,
     });
 
@@ -91,41 +88,17 @@ export class MCPConnectionRegistry {
 
   /**
    * Clean up stale connections that haven't had activity
-   * Called periodically to prevent memory leaks
+   * DISABLED: Was disconnecting active users after 30 minutes
+   *
+   * Connections are now cleaned up on:
+   * 1. Normal close (close handler)
+   * 2. New token issuance (terminateByUserId)
+   * 3. Server restart
    */
   cleanup(): void {
-    const now = Date.now();
-    let cleanedCount = 0;
-
-    for (const [connectionId, connection] of this.connections.entries()) {
-      const timeSinceActivity = now - connection.lastActivity.getTime();
-
-      if (timeSinceActivity > MCPConnectionRegistry.STALE_CONNECTION_TIMEOUT) {
-        try {
-          connection.response.end();
-          this.connections.delete(connectionId);
-          cleanedCount++;
-          console.log(`[MCPConnectionRegistry] Cleaned up stale connection ${connectionId} (inactive for ${Math.floor(timeSinceActivity / 60000)} minutes)`);
-        } catch (error) {
-          console.error(`[MCPConnectionRegistry] Error cleaning up connection ${connectionId}:`, error);
-        }
-      }
-    }
-
-    if (cleanedCount > 0) {
-      console.log(`[MCPConnectionRegistry] Cleaned up ${cleanedCount} stale connections`);
-    }
-  }
-
-  /**
-   * Update the last activity timestamp for a connection
-   * @param connectionId - The connection ID to update
-   */
-  updateActivity(connectionId: string): void {
-    const connection = this.connections.get(connectionId);
-    if (connection) {
-      connection.lastActivity = new Date();
-    }
+    // Disabled - was disconnecting active users after 30 minutes
+    const stats = this.getStats();
+    console.log('[MCPConnectionRegistry] Active connections:', stats);
   }
 
   /**
