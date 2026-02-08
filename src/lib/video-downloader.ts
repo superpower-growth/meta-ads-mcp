@@ -52,9 +52,20 @@ export interface VideoMetadata {
  */
 export async function getVideoMetadata(adId: string): Promise<VideoMetadata | null> {
   try {
-    // Get ad with creative
+    // Get ad with creative and preview URL (for fallback)
     const ad = new Ad(adId);
-    const adData = await ad.read([Ad.Fields.creative]);
+    const adData = await ad.read([
+      Ad.Fields.creative,
+      Ad.Fields.preview_shareable_link,
+      'effective_status' // To check if ad is archived
+    ]);
+
+    const effectiveStatus = (adData as any).effective_status;
+    const isArchived = effectiveStatus === 'ARCHIVED' || effectiveStatus === 'DELETED';
+
+    if (isArchived) {
+      console.warn(`Ad ${adId} is ${effectiveStatus} - video access may be limited`);
+    }
 
     // Check if creative exists
     const creativeId = (adData as any).creative?.id;
@@ -63,12 +74,19 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
       return null;
     }
 
-    // Get creative details
+    // Get creative details with additional fields for video URL extraction
     const creative = new AdCreative(creativeId);
-    const creativeData = await creative.read([AdCreative.Fields.object_story_spec]);
+    const creativeData = await creative.read([
+      AdCreative.Fields.object_story_spec,
+      AdCreative.Fields.video_id, // Direct video ID field
+      'asset_feed_spec' // For dynamic creative videos
+    ]);
 
-    // Extract video ID from object_story_spec
-    const videoId = (creativeData as any).object_story_spec?.video_data?.video_id;
+    // Extract video ID from multiple possible locations
+    let videoId = (creativeData as any).video_id || // Direct field
+                  (creativeData as any).object_story_spec?.video_data?.video_id ||
+                  (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id;
+
     if (!videoId) {
       console.log(`Ad ${adId} is not a video ad, skipping`);
       return null;
@@ -76,20 +94,44 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
 
     // Query video node using direct API call (NOT AdVideo class)
     // AdVideo class is for uploads only, use direct API call for retrieval
+    // Try multiple fields to handle archived/killed ads
     const videoResponse = await api.call(
       'GET',
       `/${videoId}`,
-      { fields: 'source,picture,length,updated_time' }
+      {
+        fields: 'source,picture,length,updated_time,permalink_url,format,thumbnails,status'
+      }
     ) as any;
+
+    // Try to get video URL from multiple possible fields
+    const videoUrl = videoResponse.source ||
+                     videoResponse.permalink_url ||
+                     videoResponse.format?.find((f: any) => f.filter === 'original')?.picture ||
+                     null;
+
+    if (!videoUrl) {
+      console.warn(`Video ${videoId} found but no downloadable URL available (possibly archived/deleted)`);
+      throw new Error(`Video ${videoId} exists but has no accessible download URL. Status: ${videoResponse.status || 'unknown'}. This often happens with archived or deleted ads.`);
+    }
 
     return {
       videoId,
-      videoUrl: videoResponse.source as string,
-      thumbnailUrl: videoResponse.picture as string,
+      videoUrl,
+      thumbnailUrl: videoResponse.picture || videoResponse.thumbnails?.data?.[0]?.uri || '',
       duration: videoResponse.length as number
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
+    // Provide helpful context for common errors
+    if (message.includes('access token') || message.includes('permission')) {
+      throw new Error(`Failed to get video metadata for ad ${adId}: ${message}. This often happens with archived/killed ads where the video asset has been deleted or access has been restricted. Try using an active ad instead.`);
+    }
+
+    if (message.includes('does not exist') || message.includes('cannot be loaded')) {
+      throw new Error(`Failed to get video metadata for ad ${adId}: ${message}. The ad or video asset may have been deleted from Meta's systems.`);
+    }
+
     throw new Error(`Failed to get video metadata for ad ${adId}: ${message}`);
   }
 }
