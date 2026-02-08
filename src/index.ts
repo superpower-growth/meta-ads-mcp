@@ -412,10 +412,11 @@ async function main() {
   // Auth routes
   app.use('/auth', authRoutes);
 
-  // MCP transport with session-based authentication
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-  });
+  // MCP transport without session management
+  // Session management is optional in MCP spec. We use OAuth bearer tokens
+  // for authentication instead of MCP sessions, which avoids stale session
+  // issues after server restarts.
+  const transport = new StreamableHTTPServerTransport();
 
   // Connect MCP server to transport
   await server.connect(transport);
