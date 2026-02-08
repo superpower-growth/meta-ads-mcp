@@ -28,20 +28,31 @@ declare global {
  */
 function sendAuthRequired(req: Request, res: Response): void {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const readinessStatus = global.serverReadiness?.getStatus();
+  const isStarting = readinessStatus?.state === 'starting';
+
+  const message = isStarting
+    ? 'Server is starting up - authentication tokens loading from database. Please retry in 2-3 seconds.'
+    : 'Connection reset after server restart. Your authentication is safe, just reconnect by restarting Claude Code.';
+
+  const instructions = isStarting
+    ? 'Server is loading authentication state. This takes 1-3 seconds. Please retry your connection.'
+    : 'Server was restarted. Your authentication tokens are safe. Restart Claude Code to establish a fresh connection.';
 
   res.status(401).json({
     jsonrpc: '2.0',
     error: {
       code: -32001,
-      message: 'Authentication required - connection reset after server restart. Please restart Claude Code.',
+      message,
       data: {
+        readiness: readinessStatus,
         authentication: {
           type: 'oauth2',
           oauth_authorization_server: `${baseUrl}/.well-known/oauth-authorization-server`,
           authorization_endpoint: `${baseUrl}/authorize`,
           token_endpoint: `${baseUrl}/token`,
           registration_endpoint: `${baseUrl}/register`,
-          instructions: 'Server was redeployed and connections were reset. Please restart Claude Code to establish a fresh connection. If you see authentication prompts, complete the OAuth flow.',
+          instructions,
         },
       },
     },

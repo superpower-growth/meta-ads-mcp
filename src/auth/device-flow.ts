@@ -286,8 +286,13 @@ export class AccessTokenStore {
   async loadFromFirestore(): Promise<void> {
     if (!this.isFirestoreEnabled || !firestore) {
       console.log('[AccessTokenStore] Firestore not enabled, using in-memory only');
+      // Still mark as complete even if not using Firestore
+      global.serverReadiness?.completeTokenLoad(0);
       return;
     }
+
+    // Notify readiness manager that loading started
+    global.serverReadiness?.startTokenLoad();
 
     try {
       const snapshot = await firestore.collection(this.collectionName).get();
@@ -346,9 +351,14 @@ export class AccessTokenStore {
       }
 
       console.log(`[AccessTokenStore] Loaded ${loadedCount} tokens from Firestore (cleaned ${expiredCount} expired)`);
+
+      // Notify readiness manager of successful completion
+      global.serverReadiness?.completeTokenLoad(loadedCount);
     } catch (error) {
       console.error('[AccessTokenStore] Failed to load from Firestore:', error);
-      // Continue with in-memory only mode
+
+      // Notify readiness manager of error (allows degraded mode)
+      global.serverReadiness?.completeTokenLoad(0, error instanceof Error ? error : new Error(String(error)));
     }
   }
 

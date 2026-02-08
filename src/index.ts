@@ -21,11 +21,13 @@ import crypto from 'crypto';
 import { env } from './config/env.js';
 import { getSessionConfig } from './auth/session.js';
 import { requireAuthForToolCall } from './middleware/auth.js';
+import { waitForReadiness } from './middleware/readiness.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
 import { AccessTokenStore } from './auth/device-flow.js';
 import { storage, firestore, isGcpEnabled } from './lib/gcp-clients.js';
 import { isGeminiEnabled, geminiConfig } from './lib/gemini-client.js';
+import { ServerReadiness } from './lib/server-readiness.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
 import { getCampaignPerformance } from './tools/get-campaign-performance.js';
@@ -234,6 +236,14 @@ const accessTokenStore = new AccessTokenStore();
 global.accessTokenStore = accessTokenStore;
 
 /**
+ * Initialize server readiness manager
+ */
+const serverReadiness = new ServerReadiness();
+
+// Make readiness manager globally accessible
+global.serverReadiness = serverReadiness;
+
+/**
  * Start MCP server with HTTP transport and OAuth authentication
  */
 async function main() {
@@ -304,10 +314,12 @@ async function main() {
 
   // Health check endpoint (no auth required)
   app.get('/health', async (_req, res) => {
+    const readinessStatus = serverReadiness.getStatus();
     const healthResponse: any = {
-      status: 'ok',
+      status: readinessStatus.state === 'ready' ? 'ok' : readinessStatus.state,
       version: '0.1.0',
       timestamp: new Date().toISOString(),
+      readiness: readinessStatus,
       gcs: {},
       firestore: {},
       gemini: {},
@@ -398,7 +410,7 @@ async function main() {
   await server.connect(transport);
 
   // MCP endpoints (allow tool discovery, require auth for tool calls)
-  app.get('/mcp', requireAuthForToolCall, async (req, res) => {
+  app.get('/mcp', waitForReadiness, requireAuthForToolCall, async (req, res) => {
     console.log('[MCP] GET /mcp request received', {
       authenticated: !!req.user,
       userId: req.user?.userId,
@@ -468,7 +480,7 @@ async function main() {
 
   // Parse body first, then check auth
   const mcpBodyParser = express.text({ type: '*/*' });
-  app.post('/mcp', mcpBodyParser, requireAuthForToolCall, async (req, res) => {
+  app.post('/mcp', mcpBodyParser, waitForReadiness, requireAuthForToolCall, async (req, res) => {
     let method = 'unknown';
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -527,25 +539,53 @@ async function main() {
     console.error(`Health check: http://${HOST}:${PORT}/health`);
     console.error(`OAuth: http://${HOST}:${PORT}/authorize`);
     console.error(`Environment: ${env.NODE_ENV}`);
+    console.error(`Readiness: ${serverReadiness.getStatus().state} (${serverReadiness.getStatus().tokenCount || 0} tokens loaded)`);
   });
 
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    console.error('SIGTERM received, shutting down gracefully...');
-    accessTokenStore.destroy();
+  // Graceful shutdown handler
+  let isShuttingDown = false;
+
+  process.on('SIGTERM', async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    console.error('[Shutdown] SIGTERM received, starting graceful shutdown...');
+
+    // Stop accepting new connections
     httpServer.close(() => {
-      console.error('HTTP server closed');
-      process.exit(0);
+      console.error('[Shutdown] HTTP server closed');
     });
+
+    // Get all active connections
+    const connections = mcpConnectionRegistry.getConnectionCount();
+    console.error(`[Shutdown] Draining ${connections} active connections...`);
+
+    // Notify clients to reconnect (send SSE event if possible)
+    try {
+      mcpConnectionRegistry.notifyRedeployment();
+    } catch (error) {
+      console.error('[Shutdown] Error notifying clients:', error);
+    }
+
+    // Give clients 20 seconds to gracefully disconnect
+    const DRAIN_TIMEOUT = 20000;
+    await new Promise(resolve => setTimeout(resolve, DRAIN_TIMEOUT));
+
+    // Force close any remaining connections
+    console.error('[Shutdown] Forcing remaining connections closed');
+    mcpConnectionRegistry.closeAll();
+
+    // Cleanup
+    accessTokenStore.destroy();
+
+    console.error('[Shutdown] Graceful shutdown complete');
+    process.exit(0);
   });
 
-  process.on('SIGINT', () => {
-    console.error('SIGINT received, shutting down gracefully...');
-    accessTokenStore.destroy();
-    httpServer.close(() => {
-      console.error('HTTP server closed');
-      process.exit(0);
-    });
+  // Handle SIGINT (Ctrl+C) same way
+  process.on('SIGINT', async () => {
+    console.error('[Shutdown] SIGINT received');
+    process.kill(process.pid, 'SIGTERM');
   });
 }
 

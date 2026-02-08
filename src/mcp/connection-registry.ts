@@ -123,4 +123,38 @@ export class MCPConnectionRegistry {
       byUser,
     };
   }
+
+  /**
+   * Notify all connections of impending server restart
+   * Sends SSE comment to inform clients to reconnect
+   */
+  notifyRedeployment(): void {
+    console.log('[MCPConnectionRegistry] Notifying all connections of redeployment');
+
+    for (const connection of this.connections.values()) {
+      try {
+        // Send SSE comment (doesn't break protocol)
+        connection.response.write(': Server redeploying, please reconnect\n\n');
+      } catch (error) {
+        console.error(`[MCPConnectionRegistry] Error notifying ${connection.connectionId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Force close all connections
+   * Called during shutdown after drain timeout
+   */
+  closeAll(): void {
+    console.log(`[MCPConnectionRegistry] Force closing ${this.connections.size} connections`);
+
+    for (const connection of this.connections.values()) {
+      try {
+        connection.response.end();
+      } catch (error) {
+        // Already closed, ignore
+      }
+    }
+    this.connections.clear();
+  }
 }
