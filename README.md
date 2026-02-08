@@ -451,11 +451,25 @@ GEMINI_MAX_COST_PER_VIDEO=0.10
 
 ## Troubleshooting
 
+### "Session not found" or "Connection reset" after redeployment
+
+**This is normal after server updates!** When we redeploy the server, all active connections are reset.
+
+**Solution:**
+1. **Restart Claude Code** (close and reopen the application)
+2. Try your query again
+3. If prompted, re-authenticate with Facebook
+
+**Why this happens:**
+- Server redeployments terminate all active MCP connections
+- Your authentication tokens are safe (stored in Firestore)
+- Claude Code just needs to establish a fresh connection
+
 ### "Unauthorized" errors
 
-1. Check your session cookie is correctly set in `mcp.json`
-2. Verify session hasn't expired (24 hour limit)
-3. Re-login at `/auth/facebook` to get a fresh session
+1. Check your authentication is valid
+2. If you just authenticated, restart Claude Code to refresh the connection
+3. Sessions last 24 hours - re-authenticate if expired
 
 ### OAuth callback errors
 

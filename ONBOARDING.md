@@ -40,13 +40,27 @@ Then restart Claude Code.
 
 ## 🔧 Troubleshooting
 
-### "Connection failed" or "Stale session"
+### "Session not found" or "Connection reset" after updates
 
-This happens after server redeployments. **Solution:**
+**This is completely normal after server updates!** When the server redeploys, all connections are reset.
 
-1. Restart Claude Code
-2. Try your query again
-3. If prompted, re-authenticate with Facebook
+**Solution (takes 10 seconds):**
+1. **Close Claude Code completely** (Cmd+Q on Mac, or close the window)
+2. **Reopen Claude Code**
+3. Try your query again
+4. If prompted to authenticate, click the link and sign in with Facebook
+
+**Why this happens:**
+- The server was updated with new features or bug fixes
+- All active connections are reset during deployment
+- Your authentication is safe - just needs to reconnect
+
+### "Connection failed" or "Connection error"
+
+**Solution:**
+1. Check your internet connection
+2. Restart Claude Code
+3. If still failing, check server status (ask your admin)
 
 ### Session expired (after 24 hours)
 

@@ -434,7 +434,28 @@ async function main() {
     } catch (error) {
       console.error('[MCP] GET /mcp error:', error);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        // Check if it's a session error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('session') || errorMessage.includes('Session')) {
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          res.status(401).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32001,
+              message: 'Connection reset after server restart. Please restart Claude Code to reconnect.',
+              data: {
+                authentication: {
+                  type: 'oauth2',
+                  oauth_authorization_server: `${baseUrl}/.well-known/oauth-authorization-server`,
+                  instructions: 'Server was redeployed. Restart Claude Code to establish a fresh connection.',
+                },
+              },
+            },
+            id: null,
+          });
+        } else {
+          res.status(500).json({ error: 'Internal server error' });
+        }
       }
     } finally {
       // Always cleanup connection, even on error
@@ -471,7 +492,28 @@ async function main() {
     } catch (error) {
       console.error('[MCP] POST /mcp error:', error);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Internal server error' });
+        // Check if it's a session error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('session') || errorMessage.includes('Session')) {
+          const baseUrl = `${req.protocol}://${req.get('host')}`;
+          res.status(200).json({
+            jsonrpc: '2.0',
+            error: {
+              code: -32001,
+              message: 'Connection reset after server restart. Please restart Claude Code to reconnect.',
+              data: {
+                authentication: {
+                  type: 'oauth2',
+                  oauth_authorization_server: `${baseUrl}/.well-known/oauth-authorization-server`,
+                  instructions: 'Server was redeployed. Restart Claude Code to establish a fresh connection.',
+                },
+              },
+            },
+            id: null,
+          });
+        } else {
+          res.status(500).json({ error: 'Internal server error' });
+        }
       }
     }
   });
