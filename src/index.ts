@@ -278,6 +278,30 @@ async function main() {
   app.use(express.urlencoded({ extended: true })); // For OAuth token requests
   app.use(session(getSessionConfig()));
 
+  // MCP Server metadata endpoint for `claude add` compatibility
+  app.get('/mcp-metadata', (_req, res) => {
+    res.json({
+      name: 'meta-ads',
+      displayName: 'Meta Ads Analytics',
+      description: 'Access Meta Marketing API for comprehensive ad analytics',
+      version: '0.1.0',
+      transport: 'http',
+      url: `${env.NODE_ENV === 'production' ? 'https://meta-ads-mcp-production-3b99.up.railway.app' : 'http://localhost:3000'}/mcp`,
+      authentication: {
+        type: 'oauth',
+        provider: 'facebook',
+        automatic: true,
+      },
+      capabilities: [
+        'Campaign performance analytics',
+        'Ad creative text analysis',
+        'Video performance metrics',
+        'Custom conversion tracking',
+        'AI-powered video interpretation',
+      ],
+    });
+  });
+
   // Health check endpoint (no auth required)
   app.get('/health', async (_req, res) => {
     const healthResponse: any = {
@@ -381,6 +405,7 @@ async function main() {
       headers: {
         authorization: req.headers.authorization ? 'present' : 'missing',
       },
+      sessionID: req.sessionID,
     });
 
     // Register connection if authenticated

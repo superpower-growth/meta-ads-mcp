@@ -61,13 +61,28 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 - **Firestore**: Analysis result caching
 - **Gemini API or Vertex AI**: Video content analysis
 
-## Quick Setup for Claude Code (10 Seconds)
+## Quick Setup for Claude Code (5 Seconds)
 
-**Just add this one line - Claude handles authentication automatically!**
+**Easiest onboarding ever - just one command!**
 
-### Step 1: Add to Claude Code
+### Method 1: One Command (Recommended)
 
-Edit `~/.config/claude-code/mcp.json`:
+```bash
+claude add https://meta-ads-mcp-production-3b99.up.railway.app/mcp
+```
+
+That's it! Now try asking in Claude Code:
+```
+"Show me campaign performance for last 7 days"
+```
+
+Claude will automatically prompt you to authenticate with Facebook, and you're done!
+
+---
+
+### Method 2: Manual Configuration
+
+If `claude add` doesn't work, edit `~/.config/claude-code/mcp.json`:
 
 ```json
 {
@@ -80,9 +95,7 @@ Edit `~/.config/claude-code/mcp.json`:
 }
 ```
 
-### Step 2: Use It!
-
-In Claude Code, try asking:
+Then restart Claude Code and ask:
 ```
 "Show me campaign performance for last 7 days"
 ```
@@ -92,7 +105,18 @@ Claude will automatically:
 2. 🚀 Handle the OAuth flow
 3. ✅ Start querying your Meta Ads data
 
-**That's it!** No manual OAuth setup, no cookies, no installation. Claude handles everything.
+**No manual OAuth setup, no cookies, no installation. Claude handles everything!**
+
+---
+
+### 📋 Onboarding Your Team
+
+Share this link with your team: [ONBOARDING.md](./ONBOARDING.md)
+
+Or send them this simple instruction:
+```
+Run: claude add https://meta-ads-mcp-production-3b99.up.railway.app/mcp
+```
 
 ---
 
