@@ -278,9 +278,20 @@ async function main() {
   app.use(cors({
     origin: true, // Allow all origins for MCP clients
     credentials: true,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-    exposedHeaders: ['Content-Type'],
+    methods: ['GET', 'POST', 'OPTIONS', 'DELETE'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Cookie',
+      'Accept',
+      'Mcp-Session-Id',
+      'MCP-Protocol-Version',
+      'Last-Event-ID',
+    ],
+    exposedHeaders: [
+      'Content-Type',
+      'Mcp-Session-Id',
+    ],
   }));
 
   // Middleware
