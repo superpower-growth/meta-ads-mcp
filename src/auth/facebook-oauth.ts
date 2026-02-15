@@ -26,7 +26,7 @@ export function getAuthorizationUrl(state?: string): string {
   const params = new URLSearchParams({
     client_id: env.FACEBOOK_APP_ID,
     redirect_uri: env.FACEBOOK_CALLBACK_URL,
-    scope: 'email',
+    scope: 'email,ads_management,pages_read_engagement',
     response_type: 'code',
     ...(state && { state }),
   });

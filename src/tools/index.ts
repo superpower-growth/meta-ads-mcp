@@ -18,6 +18,15 @@ import { compareEntitiesTool } from './compare-entities.js';
 import { getAdCreativeTextTool } from './get-ad-creative-text.js';
 import { analyzeVideoCreativeTool } from './analyze-video-creative.js';
 import { getPlacementConversionsTool } from './get-placement-conversions.js';
+import { getSavedAudiencesTool } from './get-saved-audiences.js';
+import { getFacebookPagesTool } from './get-facebook-pages.js';
+import { listAdSetsTool } from './list-ad-sets.js';
+import { analyzeVideoUrlTool } from './analyze-video-url.js';
+import { createCampaignTool } from './create-campaign.js';
+import { createAdSetTool } from './create-ad-set.js';
+import { uploadAdVideoTool } from './upload-ad-video.js';
+import { createAdCreativeTool } from './create-ad-creative.js';
+import { createAdTool } from './create-ad.js';
 
 /**
  * All available MCP tools
@@ -35,4 +44,13 @@ export const tools: Tool[] = [
   getAdCreativeTextTool,
   analyzeVideoCreativeTool,
   getPlacementConversionsTool,
+  getSavedAudiencesTool,
+  getFacebookPagesTool,
+  listAdSetsTool,
+  analyzeVideoUrlTool,
+  createCampaignTool,
+  createAdSetTool,
+  uploadAdVideoTool,
+  createAdCreativeTool,
+  createAdTool,
 ];

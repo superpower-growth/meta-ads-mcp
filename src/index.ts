@@ -41,6 +41,15 @@ import { compareEntities } from './tools/compare-entities.js';
 import { getAdCreativeText } from './tools/get-ad-creative-text.js';
 import { analyzeVideoCreative } from './tools/analyze-video-creative.js';
 import { getPlacementConversions } from './tools/get-placement-conversions.js';
+import { getSavedAudiences } from './tools/get-saved-audiences.js';
+import { getFacebookPages } from './tools/get-facebook-pages.js';
+import { listAdSets } from './tools/list-ad-sets.js';
+import { analyzeVideoUrl } from './tools/analyze-video-url.js';
+import { createCampaign } from './tools/create-campaign.js';
+import { createAdSet } from './tools/create-ad-set.js';
+import { uploadAdVideo } from './tools/upload-ad-video.js';
+import { createAdCreative } from './tools/create-ad-creative.js';
+import { createAd } from './tools/create-ad.js';
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -207,6 +216,60 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: result,
             },
           ],
+        };
+      }
+      case 'get-saved-audiences': {
+        const result = await getSavedAudiences(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'get-facebook-pages': {
+        const result = await getFacebookPages(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'list-ad-sets': {
+        const result = await listAdSets(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'analyze-video-url': {
+        const result = await analyzeVideoUrl(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'create-campaign': {
+        const result = await createCampaign(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'create-ad-set': {
+        const result = await createAdSet(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'upload-ad-video': {
+        const result = await uploadAdVideo(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'create-ad-creative': {
+        const result = await createAdCreative(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'create-ad': {
+        const result = await createAd(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
         };
       }
       default:
