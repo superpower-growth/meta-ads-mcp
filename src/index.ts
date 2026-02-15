@@ -28,6 +28,7 @@ import shipAdRouter from './routes/ship-ad.js';
 import { AccessTokenStore } from './auth/device-flow.js';
 import { storage, firestore, isGcpEnabled } from './lib/gcp-clients.js';
 import { isGeminiEnabled, geminiConfig } from './lib/gemini-client.js';
+import { isGoogleOAuthConfigured, getDriveAccessToken } from './auth/google-oauth.js';
 import { ServerReadiness } from './lib/server-readiness.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
@@ -468,6 +469,27 @@ async function main() {
         maxCostPerAnalysis: env.GEMINI_MAX_COST_PER_ANALYSIS,
         accessible: true // Assume accessible if client initialized
       };
+    }
+
+    // Check Google Drive OAuth status
+    if (!isGoogleOAuthConfigured()) {
+      healthResponse.googleDriveOAuth = {
+        configured: false,
+        reason: 'GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET not set',
+      };
+    } else {
+      try {
+        const token = await getDriveAccessToken();
+        healthResponse.googleDriveOAuth = {
+          configured: true,
+          authorized: !!token,
+        };
+      } catch {
+        healthResponse.googleDriveOAuth = {
+          configured: true,
+          authorized: false,
+        };
+      }
     }
 
     res.json(healthResponse);

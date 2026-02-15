@@ -90,6 +90,19 @@ const envSchema = z.object({
     .positive()
     .default(0.10),
 
+  // Google OAuth Configuration (for Drive API access without per-folder sharing)
+  GOOGLE_OAUTH_CLIENT_ID: z
+    .string()
+    .optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z
+    .string()
+    .optional(),
+  GOOGLE_OAUTH_CALLBACK_URL: z
+    .string()
+    .url()
+    .optional()
+    .default('https://meta-ads-mcp-production-3b99.up.railway.app/auth/google/callback'),
+
   // Ship Ad API Configuration (for n8n automation)
   SHIP_AD_API_KEY: z
     .string()
@@ -130,6 +143,9 @@ const parseEnv = () => {
       GEMINI_MODEL: process.env.GEMINI_MODEL,
       GEMINI_USE_VERTEX_AI: process.env.GEMINI_USE_VERTEX_AI,
       GEMINI_MAX_COST_PER_ANALYSIS: process.env.GEMINI_MAX_COST_PER_ANALYSIS,
+      GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
+      GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      GOOGLE_OAUTH_CALLBACK_URL: process.env.GOOGLE_OAUTH_CALLBACK_URL,
       SHIP_AD_API_KEY: process.env.SHIP_AD_API_KEY,
       DEFAULT_PAGE_ID: process.env.DEFAULT_PAGE_ID,
       DEFAULT_INSTAGRAM_ACTOR_ID: process.env.DEFAULT_INSTAGRAM_ACTOR_ID,

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Readable } from 'stream';
 import { GoogleAuth } from 'google-auth-library';
 import { env } from '../config/env.js';
+import { getDriveAccessToken } from '../auth/google-oauth.js';
 
 export type UrlType = 'google-drive-folder' | 'google-drive' | 'dropbox' | 'direct';
 
@@ -57,21 +58,44 @@ const VIDEO_MIME_TYPES = new Set([
 ]);
 
 /**
- * List video files in a Google Drive folder using service account credentials
+ * Get a bearer token for Google Drive API access.
+ * 1. Try OAuth token (no per-folder sharing needed)
+ * 2. Fall back to service account
+ * 3. Throw if neither is available
  */
-async function listDriveFolderVideos(folderId: string): Promise<{ id: string; name: string; mimeType: string }[]> {
-  const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!saJson) {
-    throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON required to access Google Drive folders');
+async function getDriveBearerToken(): Promise<string> {
+  // Try OAuth first
+  const oauthToken = await getDriveAccessToken();
+  if (oauthToken) {
+    console.log('[video-downloader] Using OAuth token for Drive access');
+    return oauthToken;
   }
 
-  const credentials = JSON.parse(saJson);
-  const auth = new GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-  });
-  const client = await auth.getClient();
-  const token = await client.getAccessToken();
+  // Fall back to service account
+  const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (saJson) {
+    console.log('[video-downloader] Using service account for Drive access');
+    const credentials = JSON.parse(saJson);
+    const auth = new GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+    });
+    const client = await auth.getClient();
+    const token = await client.getAccessToken();
+    return typeof token === 'string' ? token : token.token!;
+  }
+
+  throw new Error(
+    'No Google Drive credentials available. Either configure Google OAuth (visit /auth/google) ' +
+    'or set GOOGLE_SERVICE_ACCOUNT_JSON.'
+  );
+}
+
+/**
+ * List video files in a Google Drive folder
+ */
+async function listDriveFolderVideos(folderId: string): Promise<{ id: string; name: string; mimeType: string }[]> {
+  const token = await getDriveBearerToken();
 
   const query = `'${folderId}' in parents and trashed = false`;
   const response = await axios.get('https://www.googleapis.com/drive/v3/files', {
@@ -82,7 +106,7 @@ async function listDriveFolderVideos(folderId: string): Promise<{ id: string; na
       orderBy: 'createdTime desc',
     },
     headers: {
-      Authorization: `Bearer ${typeof token === 'string' ? token : token.token}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
@@ -91,21 +115,10 @@ async function listDriveFolderVideos(folderId: string): Promise<{ id: string; na
 }
 
 /**
- * Download a file from Google Drive using service account credentials
+ * Download a file from Google Drive
  */
 async function downloadDriveFile(fileId: string): Promise<DownloadResult> {
-  const saJson = env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!saJson) {
-    throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON required to download from Google Drive');
-  }
-
-  const credentials = JSON.parse(saJson);
-  const auth = new GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
-  });
-  const client = await auth.getClient();
-  const token = await client.getAccessToken();
+  const token = await getDriveBearerToken();
 
   const response = await axios({
     method: 'GET',
@@ -113,7 +126,7 @@ async function downloadDriveFile(fileId: string): Promise<DownloadResult> {
     responseType: 'stream',
     timeout: 120000,
     headers: {
-      Authorization: `Bearer ${typeof token === 'string' ? token : token.token}`,
+      Authorization: `Bearer ${token}`,
     },
   });
 
