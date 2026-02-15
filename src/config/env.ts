@@ -89,6 +89,23 @@ const envSchema = z.object({
     .number()
     .positive()
     .default(0.10),
+
+  // Ship Ad API Configuration (for n8n automation)
+  SHIP_AD_API_KEY: z
+    .string()
+    .optional(),
+  DEFAULT_PAGE_ID: z
+    .string()
+    .optional(),
+  DEFAULT_INSTAGRAM_ACTOR_ID: z
+    .string()
+    .optional(),
+  DEFAULT_CAMPAIGN_ID: z
+    .string()
+    .optional(),
+  DEFAULT_AD_SET_ID: z
+    .string()
+    .optional(),
 });
 
 // Parse and validate environment variables
@@ -113,6 +130,11 @@ const parseEnv = () => {
       GEMINI_MODEL: process.env.GEMINI_MODEL,
       GEMINI_USE_VERTEX_AI: process.env.GEMINI_USE_VERTEX_AI,
       GEMINI_MAX_COST_PER_ANALYSIS: process.env.GEMINI_MAX_COST_PER_ANALYSIS,
+      SHIP_AD_API_KEY: process.env.SHIP_AD_API_KEY,
+      DEFAULT_PAGE_ID: process.env.DEFAULT_PAGE_ID,
+      DEFAULT_INSTAGRAM_ACTOR_ID: process.env.DEFAULT_INSTAGRAM_ACTOR_ID,
+      DEFAULT_CAMPAIGN_ID: process.env.DEFAULT_CAMPAIGN_ID,
+      DEFAULT_AD_SET_ID: process.env.DEFAULT_AD_SET_ID,
     });
 
     // Validation: Require GEMINI_API_KEY if not using Vertex AI

@@ -24,6 +24,7 @@ import { requireAuthForToolCall } from './middleware/auth.js';
 import { waitForReadiness } from './middleware/readiness.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
+import shipAdRouter from './routes/ship-ad.js';
 import { AccessTokenStore } from './auth/device-flow.js';
 import { storage, firestore, isGcpEnabled } from './lib/gcp-clients.js';
 import { isGeminiEnabled, geminiConfig } from './lib/gemini-client.js';
@@ -361,6 +362,9 @@ async function main() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true })); // For OAuth token requests
   app.use(session(getSessionConfig()));
+
+  // Ship Ad REST API (n8n automation, API key auth)
+  app.use('/api', shipAdRouter);
 
   // MCP Server metadata endpoint for `claude add` compatibility
   app.get('/mcp-metadata', (_req, res) => {

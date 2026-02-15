@@ -128,6 +128,91 @@ export class AdCreatorService {
     return 'Unknown Meta API error occurred';
   }
 
+  async findCampaignByName(name: string): Promise<{ id: string; name: string } | null> {
+    try {
+      this.initApi();
+      const account = new AdAccount(this.accountId);
+      const response = await account.getCampaigns(
+        ['id', 'name'],
+        { filtering: [{ field: 'name', operator: 'CONTAIN', value: name }], limit: 100 }
+      );
+
+      // Exact match first, then substring match
+      for (const campaign of response) {
+        if (campaign.name === name) {
+          console.log(`[AdCreatorService] Found campaign by exact name: ${campaign.id} "${campaign.name}"`);
+          return { id: campaign.id, name: campaign.name };
+        }
+      }
+
+      // No exact match found
+      if (response.length > 0) {
+        console.log(`[AdCreatorService] No exact match for campaign "${name}", found ${response.length} partial matches`);
+      }
+      return null;
+    } catch (error: any) {
+      const errorMessage = this.formatMetaError(error);
+      throw new Error(`Failed to find campaign by name: ${errorMessage}`);
+    }
+  }
+
+  async findAdSetByName(campaignId: string, name: string): Promise<{ id: string; name: string } | null> {
+    try {
+      this.initApi();
+      const account = new AdAccount(this.accountId);
+      const response = await account.getAdSets(
+        ['id', 'name', 'status'],
+        {
+          filtering: [
+            { field: 'campaign_id', operator: 'EQUAL', value: campaignId },
+            { field: 'name', operator: 'CONTAIN', value: name },
+          ],
+          limit: 100,
+        }
+      );
+
+      for (const adSet of response) {
+        if (adSet.name === name) {
+          console.log(`[AdCreatorService] Found ad set by exact name: ${adSet.id} "${adSet.name}"`);
+          return { id: adSet.id, name: adSet.name };
+        }
+      }
+
+      return null;
+    } catch (error: any) {
+      const errorMessage = this.formatMetaError(error);
+      throw new Error(`Failed to find ad set by name: ${errorMessage}`);
+    }
+  }
+
+  async cloneAdSetSettings(campaignId: string): Promise<Record<string, any> | null> {
+    try {
+      this.initApi();
+      const account = new AdAccount(this.accountId);
+      const response = await account.getAdSets(
+        ['id', 'name', 'billing_event', 'optimization_goal', 'targeting', 'daily_budget', 'lifetime_budget', 'promoted_object', 'bid_strategy'],
+        { filtering: [{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }], limit: 1 }
+      );
+
+      if (response.length === 0) return null;
+
+      const source = response[0];
+      console.log(`[AdCreatorService] Cloning settings from ad set: ${source.id} "${source.name}"`);
+      return {
+        billing_event: source.billing_event || 'IMPRESSIONS',
+        optimization_goal: source.optimization_goal || 'REACH',
+        targeting: source.targeting,
+        daily_budget: source.daily_budget,
+        lifetime_budget: source.lifetime_budget,
+        promoted_object: source.promoted_object,
+        bid_strategy: source.bid_strategy,
+      };
+    } catch (error: any) {
+      const errorMessage = this.formatMetaError(error);
+      throw new Error(`Failed to clone ad set settings: ${errorMessage}`);
+    }
+  }
+
   async getSavedAudiences(): Promise<SavedAudience[]> {
     try {
       this.initApi();
