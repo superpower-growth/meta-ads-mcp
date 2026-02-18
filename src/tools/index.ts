@@ -22,6 +22,7 @@ import { getSavedAudiencesTool } from './get-saved-audiences.js';
 import { getFacebookPagesTool } from './get-facebook-pages.js';
 import { listAdSetsTool } from './list-ad-sets.js';
 import { analyzeVideoUrlTool } from './analyze-video-url.js';
+import { analyzeImageUrlTool } from './analyze-image-url.js';
 import { createCampaignTool } from './create-campaign.js';
 import { createAdSetTool } from './create-ad-set.js';
 import { uploadAdVideoTool } from './upload-ad-video.js';
@@ -48,6 +49,7 @@ export const tools: Tool[] = [
   getFacebookPagesTool,
   listAdSetsTool,
   analyzeVideoUrlTool,
+  analyzeImageUrlTool,
   createCampaignTool,
   createAdSetTool,
   uploadAdVideoTool,

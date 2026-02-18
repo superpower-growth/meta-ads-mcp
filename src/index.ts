@@ -47,6 +47,7 @@ import { getSavedAudiences } from './tools/get-saved-audiences.js';
 import { getFacebookPages } from './tools/get-facebook-pages.js';
 import { listAdSets } from './tools/list-ad-sets.js';
 import { analyzeVideoUrl } from './tools/analyze-video-url.js';
+import { analyzeImageUrl } from './tools/analyze-image-url.js';
 import { createCampaign } from './tools/create-campaign.js';
 import { createAdSet } from './tools/create-ad-set.js';
 import { uploadAdVideo } from './tools/upload-ad-video.js';
@@ -240,6 +241,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'analyze-video-url': {
         const result = await analyzeVideoUrl(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'analyze-image-url': {
+        const result = await analyzeImageUrl(args as any);
         return {
           content: [{ type: 'text', text: result }],
         };

@@ -46,7 +46,7 @@ function extractDriveFileId(url: string): string {
 /**
  * Extract Google Drive folder ID from URL
  */
-function extractDriveFolderId(url: string): string {
+export function extractDriveFolderId(url: string): string {
   const match = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
   if (match) return match[1];
   throw new Error(`Cannot extract folder ID from Google Drive URL: ${url}`);
@@ -55,6 +55,11 @@ function extractDriveFolderId(url: string): string {
 const VIDEO_MIME_TYPES = new Set([
   'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm',
   'video/x-matroska', 'video/mpeg', 'video/3gpp', 'video/x-m4v',
+]);
+
+const IMAGE_MIME_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'image/bmp', 'image/tiff',
 ]);
 
 /**
@@ -91,17 +96,27 @@ async function getDriveBearerToken(): Promise<string> {
   );
 }
 
+export interface DriveFileInfo {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: string;
+}
+
 /**
- * List video files in a Google Drive folder
+ * List all files in a Google Drive folder with metadata including video dimensions
  */
-async function listDriveFolderVideos(folderId: string): Promise<{ id: string; name: string; mimeType: string }[]> {
+export async function listDriveFolderFiles(folderId: string): Promise<DriveFileInfo[]> {
   const token = await getDriveBearerToken();
 
   const query = `'${folderId}' in parents and trashed = false`;
   const response = await axios.get('https://www.googleapis.com/drive/v3/files', {
     params: {
       q: query,
-      fields: 'files(id,name,mimeType,size)',
+      fields: 'files(id,name,mimeType,size,videoMediaMetadata,imageMediaMetadata)',
       pageSize: 100,
       orderBy: 'createdTime desc',
     },
@@ -111,13 +126,42 @@ async function listDriveFolderVideos(folderId: string): Promise<{ id: string; na
   });
 
   const files = response.data.files || [];
-  return files.filter((f: any) => VIDEO_MIME_TYPES.has(f.mimeType));
+  return files.map((f: any) => {
+    const width = f.videoMediaMetadata?.width || f.imageMediaMetadata?.width;
+    const height = f.videoMediaMetadata?.height || f.imageMediaMetadata?.height;
+    let aspectRatio: string | undefined;
+    if (width && height) {
+      const ratio = width / height;
+      if (Math.abs(ratio - 4 / 5) < 0.05) aspectRatio = '4:5';
+      else if (Math.abs(ratio - 9 / 16) < 0.05) aspectRatio = '9:16';
+      else if (Math.abs(ratio - 1) < 0.05) aspectRatio = '1:1';
+      else if (Math.abs(ratio - 16 / 9) < 0.05) aspectRatio = '16:9';
+      else aspectRatio = `${width}:${height}`;
+    }
+    return { id: f.id, name: f.name, mimeType: f.mimeType, size: f.size, width, height, aspectRatio };
+  });
+}
+
+/**
+ * List video files in a Google Drive folder
+ */
+async function listDriveFolderVideos(folderId: string): Promise<DriveFileInfo[]> {
+  const allFiles = await listDriveFolderFiles(folderId);
+  return allFiles.filter(f => VIDEO_MIME_TYPES.has(f.mimeType));
+}
+
+/**
+ * List image files in a Google Drive folder
+ */
+export async function listDriveFolderImages(folderId: string): Promise<DriveFileInfo[]> {
+  const allFiles = await listDriveFolderFiles(folderId);
+  return allFiles.filter(f => IMAGE_MIME_TYPES.has(f.mimeType));
 }
 
 /**
  * Download a file from Google Drive
  */
-async function downloadDriveFile(fileId: string): Promise<DownloadResult> {
+export async function downloadDriveFile(fileId: string): Promise<DownloadResult> {
   const token = await getDriveBearerToken();
 
   const response = await axios({
