@@ -53,6 +53,8 @@ import { createAdSet } from './tools/create-ad-set.js';
 import { uploadAdVideo } from './tools/upload-ad-video.js';
 import { createAdCreative } from './tools/create-ad-creative.js';
 import { createAd } from './tools/create-ad.js';
+import { shipAdsBatch } from './tools/ship-ads-batch.js';
+import { syncCampaignsToNotion } from './tools/sync-campaigns-to-notion.js';
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -281,6 +283,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: result }],
         };
       }
+      case 'ship-ads-batch': {
+        const result = await shipAdsBatch(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'sync-campaigns-to-notion': {
+        const result = await syncCampaignsToNotion();
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -333,6 +347,27 @@ async function main() {
   //   mcpConnectionRegistry.cleanup();
   // }, 5 * 60 * 1000);
 
+  // Auto-detect ad account ID if not provided
+  if (!env.META_AD_ACCOUNT_ID) {
+    console.log('[Startup] META_AD_ACCOUNT_ID not set, auto-detecting from API token...');
+    try {
+      const { default: axios } = await import('axios');
+      const resp = await axios.get('https://graph.facebook.com/v24.0/me/adaccounts', {
+        params: { access_token: env.META_ACCESS_TOKEN, fields: 'id,name,account_status', limit: 1 },
+      });
+      const accounts = resp.data?.data;
+      if (accounts && accounts.length > 0) {
+        (env as any).META_AD_ACCOUNT_ID = accounts[0].id;
+        console.log(`[Startup] Auto-detected ad account: ${accounts[0].id} (${accounts[0].name})`);
+      } else {
+        console.warn('[Startup] No ad accounts found for this token. Some tools will fail.');
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[Startup] Failed to auto-detect ad account: ${msg}. Set META_AD_ACCOUNT_ID manually.`);
+    }
+  }
+
   // Load persisted tokens from Firestore
   console.log('[Startup] Loading persisted access tokens from Firestore...');
   await accessTokenStore.loadFromFirestore();
@@ -340,8 +375,8 @@ async function main() {
 
   const app = express();
 
-  // Trust Railway proxy for secure cookies
-  // Railway terminates SSL at the proxy level, so we need to trust X-Forwarded-Proto
+  // Trust reverse proxy for secure cookies
+  // Fly.io/Railway terminates SSL at the proxy level, so we need to trust X-Forwarded-Proto
   if (env.NODE_ENV === 'production') {
     app.set('trust proxy', 1);
   }
@@ -382,7 +417,7 @@ async function main() {
       description: 'Access Meta Marketing API for comprehensive ad analytics',
       version: '0.1.0',
       transport: 'http',
-      url: `${env.NODE_ENV === 'production' ? 'https://meta-ads-mcp-production-3b99.up.railway.app' : 'http://localhost:3000'}/mcp`,
+      url: `${env.NODE_ENV === 'production' ? 'https://sp-meta-ads-mcp.fly.dev' : 'http://localhost:3000'}/mcp`,
       authentication: {
         type: 'oauth',
         provider: 'facebook',

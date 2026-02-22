@@ -128,6 +128,24 @@ export class AdCreatorService {
     return 'Unknown Meta API error occurred';
   }
 
+  async getActiveCampaigns(): Promise<Array<{ id: string; name: string }>> {
+    try {
+      this.initApi();
+      const account = new AdAccount(this.accountId);
+      const response = await account.getCampaigns(
+        ['id', 'name'],
+        { filtering: [{ field: 'effective_status', operator: 'IN', value: ['ACTIVE'] }], limit: 500 }
+      );
+
+      const campaigns = response.map((c: any) => ({ id: c.id, name: c.name }));
+      console.log(`[AdCreatorService] Fetched ${campaigns.length} active campaigns`);
+      return campaigns;
+    } catch (error: any) {
+      const errorMessage = this.formatMetaError(error);
+      throw new Error(`Failed to get active campaigns: ${errorMessage}`);
+    }
+  }
+
   async findCampaignByName(name: string): Promise<{ id: string; name: string } | null> {
     try {
       this.initApi();
@@ -190,9 +208,16 @@ export class AdCreatorService {
       this.initApi();
       const account = new AdAccount(this.accountId);
       const response = await account.getAdSets(
-        ['id', 'name', 'billing_event', 'optimization_goal', 'targeting', 'daily_budget', 'lifetime_budget', 'promoted_object', 'bid_strategy'],
-        { filtering: [{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }], limit: 1 }
+        ['id', 'name', 'billing_event', 'optimization_goal', 'targeting', 'daily_budget', 'lifetime_budget', 'promoted_object', 'bid_strategy', 'created_time'],
+        { filtering: [{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }], limit: 10 }
       );
+
+      // Sort by created_time descending to get the most recent adset
+      response.sort((a: any, b: any) => {
+        const timeA = new Date(a.created_time || 0).getTime();
+        const timeB = new Date(b.created_time || 0).getTime();
+        return timeB - timeA;
+      });
 
       if (response.length === 0) return null;
 
