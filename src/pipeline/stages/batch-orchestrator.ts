@@ -19,7 +19,7 @@ export interface BatchShipInput {
     angle: string;
     format: string;
     messenger: string;
-    landingPageUrl: string;
+    landingPageUrl?: string;
     adSetName: string;
   }>;
   dryRun?: boolean;

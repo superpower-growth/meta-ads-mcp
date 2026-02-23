@@ -8,6 +8,11 @@
 import { geminiClient, isGeminiEnabled, geminiConfig } from './gemini-client.js';
 import { z } from 'zod';
 import { env } from '../config/env.js';
+import { storage } from './gcp-clients.js';
+import pLimit from 'p-limit';
+
+// Semaphore: only 1 concurrent Gemini File API upload at a time to avoid OOM on 2GB Fly.io
+const uploadLimit = pLimit(1);
 
 /**
  * Video analysis schema - defines the structure of analysis results
@@ -176,56 +181,98 @@ function parseJsonResponse(responseText: string): any {
 async function analyzeVideoInternal(gcsPath: string): Promise<VideoAnalysis> {
   console.log(`Starting video analysis for: ${gcsPath}`);
 
-  // Upload video to Gemini Files API
-  const uploadedFile = await geminiClient!.files.upload({
-    file: gcsPath,
-    config: {
-      mimeType: 'video/mp4'
+  // Stream video from GCS to a temp file, then upload via Gemini File API
+  // This avoids loading the entire video into memory (which causes OOM on large files)
+  const bucket = storage!.bucket(env.GCS_BUCKET_NAME);
+  const gcsFile = bucket.file(gcsPath);
+
+  const { createWriteStream, createReadStream } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const { unlink } = await import('fs/promises');
+  const { pipeline } = await import('stream/promises');
+
+  const tmpPath = join(tmpdir(), `gemini-upload-${Date.now()}.mp4`);
+
+  try {
+    // Stream from GCS to temp file (no memory buffering)
+    console.log(`Streaming video from GCS to temp file...`);
+    await pipeline(gcsFile.createReadStream(), createWriteStream(tmpPath));
+
+    const { stat } = await import('fs/promises');
+    const fileStat = await stat(tmpPath);
+    console.log(`Downloaded ${(fileStat.size / 1024 / 1024).toFixed(1)}MB to temp file for Gemini upload`);
+
+    // Upload to Gemini File API — serialized via semaphore to prevent OOM with concurrent uploads
+    console.log(`Uploading to Gemini File API (queue position: ${uploadLimit.pendingCount + 1})...`);
+    const uploadResult = await uploadLimit(async () => {
+      const { readFile } = await import('fs/promises');
+      return geminiClient!.files.upload({
+        file: new Blob([await readFile(tmpPath)]),
+        config: { mimeType: 'video/mp4' },
+      });
+    });
+
+    console.log(`Gemini file uploaded: ${uploadResult.name}, state: ${uploadResult.state}`);
+
+    // Wait for file to be processed by Gemini
+    let fileState = uploadResult;
+    while (fileState.state === 'PROCESSING') {
+      console.log('Waiting for Gemini to process video...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      fileState = await geminiClient!.files.get({ name: fileState.name! });
     }
-  });
 
-  console.log(`Video uploaded to Files API: ${uploadedFile.uri}`);
+    if (fileState.state === 'FAILED') {
+      throw new Error(`Gemini file processing failed: ${fileState.name}`);
+    }
 
-  // Generate analysis with structured output
-  const response = await geminiClient!.models.generateContent({
-    model: geminiConfig.model,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            fileData: {
-              mimeType: uploadedFile.mimeType,
-              fileUri: uploadedFile.uri
+    console.log(`Gemini file ready: ${fileState.uri}`);
+
+    // Generate analysis using file reference (not inline data)
+    const response = await geminiClient!.models.generateContent({
+      model: geminiConfig.model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              fileData: {
+                fileUri: fileState.uri!,
+                mimeType: 'video/mp4',
+              },
+            },
+            {
+              text: ANALYSIS_PROMPT
             }
-          },
-          {
-            text: ANALYSIS_PROMPT
-          }
-        ]
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: geminiAnalysisSchema
       }
-    ],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: geminiAnalysisSchema
+    });
+
+    // Extract response text
+    const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error('No response text from Gemini API');
     }
-  });
 
-  // Extract response text
-  const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!responseText) {
-    throw new Error('No response text from Gemini API');
+    console.log(`Received analysis response (${responseText.length} chars)`);
+
+    // Parse and validate response
+    const parsed = parseJsonResponse(responseText);
+    const validated = VideoAnalysisSchema.parse(parsed);
+
+    console.log(`Analysis completed: ${validated.scenes.length} scenes, ${validated.textOverlays.length} text overlays`);
+
+    return validated;
+  } finally {
+    // Clean up temp file
+    try { await unlink(tmpPath); } catch {}
   }
-
-  console.log(`Received analysis response (${responseText.length} chars)`);
-
-  // Parse and validate response
-  const parsed = parseJsonResponse(responseText);
-  const validated = VideoAnalysisSchema.parse(parsed);
-
-  console.log(`Analysis completed: ${validated.scenes.length} scenes, ${validated.textOverlays.length} text overlays`);
-
-  return validated;
 }
 
 /**

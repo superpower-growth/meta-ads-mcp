@@ -1,4 +1,4 @@
-import { AdAccount, Campaign, AdSet, Ad, AdCreative, FacebookAdsApi } from 'facebook-nodejs-business-sdk';
+import { AdAccount, Campaign, AdSet, Ad, AdCreative, AdVideo, FacebookAdsApi } from 'facebook-nodejs-business-sdk';
 import { env } from '../config/env.js';
 
 export interface SavedAudience {
@@ -40,6 +40,7 @@ export interface VideoUploadResult {
   videoId: string;
   title: string;
   status: string;
+  thumbnailUrl?: string;
 }
 
 export interface AdCreativeResult {
@@ -82,12 +83,13 @@ export interface CreateAdSetParams {
   start_time?: string;
   end_time?: string;
   promoted_object?: Record<string, any>;
+  attribution_spec?: Array<{ event_type: string; window_days: number }>;
 }
 
 export interface CreateAdCreativeParams {
   name: string;
   pageId: string;
-  instagramActorId?: string;
+  instagramUserId?: string;
   videoId: string;
   primaryText: string;
   headline?: string;
@@ -97,12 +99,37 @@ export interface CreateAdCreativeParams {
   thumbnailUrl?: string;
 }
 
+export interface CreatePlacementMappedCreativeParams {
+  name: string;
+  pageId: string;
+  instagramUserId?: string;
+  videos: Array<{ videoId: string; thumbnailUrl?: string; ratio: string }>;
+  primaryText: string;
+  headline: string;
+  description: string;
+  callToAction?: string;
+  linkUrl: string;
+}
+
+export interface FlexibleAdGroup {
+  videos: Array<{ video_id: string }>;
+  texts: Array<{ text: string }>;
+  titles: Array<{ text: string }>;
+  descriptions: Array<{ text: string }>;
+  call_to_action_types: string[];
+  link_urls: Array<{ website_url: string }>;
+  ad_formats: string[];
+}
+
 export interface CreateAdParams {
   adset_id: string;
   creative_id: string;
   name: string;
   status?: string;
   tracking_specs?: Record<string, any>[];
+  creative_asset_groups_spec?: {
+    groups: FlexibleAdGroup[];
+  };
 }
 
 export class AdCreatorService {
@@ -117,12 +144,15 @@ export class AdCreatorService {
   }
 
   private formatMetaError(error: any): string {
-    console.error('[AdCreatorService] Raw Meta API error:', {
-      message: error.message,
-      code: error.code,
-      type: error.type,
-      error_subcode: error.error_subcode,
-    });
+    // Log all enumerable properties of the error
+    const allProps: Record<string, any> = {};
+    for (const key of Object.getOwnPropertyNames(error)) {
+      try { allProps[key] = error[key]; } catch { allProps[key] = '[unreadable]'; }
+    }
+    console.error('[AdCreatorService] Raw Meta API error (all props):', JSON.stringify(allProps, null, 2));
+    // Prefer the user-facing message from Meta (most descriptive)
+    const userMsg = error.response?.error_user_msg || error.error_user_msg;
+    if (userMsg) return `${error.message}: ${userMsg}`;
     if (error.message) return error.message;
     if (error.error?.message) return error.error.message;
     return 'Unknown Meta API error occurred';
@@ -203,13 +233,27 @@ export class AdCreatorService {
     }
   }
 
+  async isCampaignBudgetOptimization(campaignId: string): Promise<boolean> {
+    try {
+      this.initApi();
+      const campaign = new Campaign(campaignId);
+      const response: any = await campaign.get(['id', 'daily_budget', 'lifetime_budget']);
+      const hasCBO = !!(response.daily_budget || response.lifetime_budget);
+      console.log(`[AdCreatorService] Campaign ${campaignId} CBO: ${hasCBO} (daily_budget=${response.daily_budget}, lifetime_budget=${response.lifetime_budget})`);
+      return hasCBO;
+    } catch (error: any) {
+      const errorMessage = this.formatMetaError(error);
+      throw new Error(`Failed to check campaign budget: ${errorMessage}`);
+    }
+  }
+
   async cloneAdSetSettings(campaignId: string): Promise<Record<string, any> | null> {
     try {
       this.initApi();
-      const account = new AdAccount(this.accountId);
-      const response = await account.getAdSets(
+      const campaign = new Campaign(campaignId);
+      const response = await campaign.getAdSets(
         ['id', 'name', 'billing_event', 'optimization_goal', 'targeting', 'daily_budget', 'lifetime_budget', 'promoted_object', 'bid_strategy', 'created_time'],
-        { filtering: [{ field: 'campaign_id', operator: 'EQUAL', value: campaignId }], limit: 10 }
+        { limit: 10 }
       );
 
       // Sort by created_time descending to get the most recent adset
@@ -385,6 +429,10 @@ export class AdCreatorService {
         adSetParams.targeting = params.targeting;
       }
 
+      if (params.attribution_spec) {
+        adSetParams.attribution_spec = params.attribution_spec;
+      }
+
       const result = await account.createAdSet([], adSetParams);
 
       console.log(`[AdCreatorService] Created ad set: ${result.id}`);
@@ -411,15 +459,66 @@ export class AdCreatorService {
       });
 
       console.log(`[AdCreatorService] Uploaded video: ${result.id}`);
+
+      // Wait for video to finish processing and get thumbnail
+      const thumbnailUrl = await this.waitForVideoReady(result.id);
+
       return {
         videoId: result.id,
         title: title,
-        status: 'processing',
+        status: 'ready',
+        thumbnailUrl,
       };
     } catch (error: any) {
       const errorMessage = this.formatMetaError(error);
       throw new Error(`Failed to upload video: ${errorMessage}`);
     }
+  }
+
+  private async waitForVideoReady(videoId: string): Promise<string | undefined> {
+    try {
+      console.log(`[AdCreatorService] Waiting for video ${videoId} to finish encoding...`);
+
+      // Poll video status via Graph API
+      const maxAttempts = 30; // 5 minutes max (10s intervals)
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const statusUrl = `https://graph.facebook.com/v22.0/${videoId}?fields=status&access_token=${env.META_ACCESS_TOKEN}`;
+          const res = await fetch(statusUrl);
+          const data = await res.json() as any;
+          const status = data?.status?.video_status;
+          console.log(`[AdCreatorService] Video ${videoId} status: ${status} (attempt ${attempt}/${maxAttempts})`);
+          if (status === 'ready') break;
+          if (status === 'error') throw new Error(`Video ${videoId} encoding failed`);
+        } catch (pollError: any) {
+          console.warn(`[AdCreatorService] Status poll error: ${pollError.message}`);
+        }
+        await new Promise((r) => setTimeout(r, 10000));
+      }
+      // Extra 5s buffer after "ready" — Meta sometimes needs a moment
+      await new Promise((r) => setTimeout(r, 5000));
+      console.log(`[AdCreatorService] Video ${videoId} encoding complete`);
+
+      // Fetch thumbnail via Graph API
+      try {
+        const api = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
+        const thumbResponse: any = await api.call('GET', `/${videoId}/thumbnails`, { fields: 'uri' });
+        const thumbData = thumbResponse?.data?.data || thumbResponse?.data || [];
+        if (thumbData.length > 0 && thumbData[0].uri) {
+          console.log(`[AdCreatorService] Got thumbnail for video ${videoId}`);
+          return thumbData[0].uri;
+        }
+        console.warn(`[AdCreatorService] No thumbnails returned for video ${videoId}`);
+      } catch (thumbError: any) {
+        console.warn(`[AdCreatorService] Thumbnail fetch failed: ${thumbError.message}`);
+      }
+
+      // Fallback: use Facebook's video picture URL with access token
+      return `https://graph.facebook.com/${videoId}/picture?access_token=${env.META_ACCESS_TOKEN}`;
+    } catch (error: any) {
+      console.warn(`[AdCreatorService] waitForVideoReady error: ${error.message}`);
+    }
+    return undefined;
   }
 
   async createAdCreative(params: CreateAdCreativeParams): Promise<AdCreativeResult> {
@@ -445,15 +544,16 @@ export class AdCreatorService {
         video_data: videoData,
       };
 
-      if (params.instagramActorId) {
-        objectStorySpec.instagram_actor_id = params.instagramActorId;
-      }
-
-      const creativeParams = {
+      const creativeParams: Record<string, any> = {
         name: params.name,
         object_story_spec: objectStorySpec,
       };
 
+      if (params.instagramUserId) {
+        creativeParams.instagram_user_id = params.instagramUserId;
+      }
+
+      console.log(`[AdCreatorService] Creating ad creative with params:`, JSON.stringify(creativeParams, null, 2));
       const result = await account.createAdCreative([], creativeParams);
 
       console.log(`[AdCreatorService] Created ad creative: ${result.id}`);
@@ -469,6 +569,181 @@ export class AdCreatorService {
     }
   }
 
+  async createPlacementMappedCreative(params: CreatePlacementMappedCreativeParams): Promise<AdCreativeResult> {
+    try {
+      this.initApi();
+      const account = new AdAccount(this.accountId);
+
+      const feedVideo = params.videos.find((v) => v.ratio === '4:5');
+      const reelsVideo = params.videos.find((v) => v.ratio === '9:16');
+
+      // If we have both formats, use asset_feed_spec with asset_customization_rules
+      // to serve native 4:5 on Feed and native 9:16 on Stories/Reels.
+      // If only one format, fall back to single-video creative with auto_crop.
+      if (feedVideo && reelsVideo) {
+        return this.createAssetFeedCreative(params, feedVideo, reelsVideo);
+      }
+
+      // Fallback: single video with auto_crop
+      const primaryVideo = reelsVideo || feedVideo!;
+      return this.createSingleVideoCreative(params, primaryVideo);
+    } catch (error: any) {
+      const errorMessage = this.formatMetaError(error);
+      throw new Error(`Failed to create placement-mapped creative: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Create a creative using asset_feed_spec with asset_customization_rules
+   * for true per-placement video (4:5 Feed, 9:16 Reels/Stories).
+   */
+  private async createAssetFeedCreative(
+    params: CreatePlacementMappedCreativeParams,
+    feedVideo: { videoId: string; thumbnailUrl?: string; ratio: string },
+    reelsVideo: { videoId: string; thumbnailUrl?: string; ratio: string }
+  ): Promise<AdCreativeResult> {
+    const account = new AdAccount(this.accountId);
+
+    const assetFeedSpec: Record<string, any> = {
+      ad_formats: ['SINGLE_VIDEO'],
+      optimization_type: 'PLACEMENT',
+      videos: [
+        { video_id: feedVideo.videoId, adlabels: [{ name: 'feed' }] },
+        { video_id: reelsVideo.videoId, adlabels: [{ name: 'reels' }] },
+      ],
+      bodies: [{ text: params.primaryText, adlabels: [{ name: 'default' }] }],
+      titles: [{ text: params.headline, adlabels: [{ name: 'default' }] }],
+      descriptions: [{ text: params.description || params.headline, adlabels: [{ name: 'default' }] }],
+      link_urls: [{ website_url: params.linkUrl, adlabels: [{ name: 'default' }] }],
+      call_to_action_types: [params.callToAction || 'LEARN_MORE'],
+      asset_customization_rules: [
+        {
+          customization_spec: {
+            publisher_platforms: ['facebook', 'instagram'],
+            facebook_positions: ['feed'],
+            instagram_positions: ['stream'],
+          },
+          video_label: { name: 'feed' },
+          body_label: { name: 'default' },
+          title_label: { name: 'default' },
+          description_label: { name: 'default' },
+          link_url_label: { name: 'default' },
+        },
+        {
+          customization_spec: {
+            publisher_platforms: ['facebook', 'instagram'],
+            facebook_positions: ['story', 'facebook_reels'],
+            instagram_positions: ['story', 'reels'],
+          },
+          video_label: { name: 'reels' },
+          body_label: { name: 'default' },
+          title_label: { name: 'default' },
+          description_label: { name: 'default' },
+          link_url_label: { name: 'default' },
+        },
+        {
+          // Default catch-all rule (required by Meta — must have empty customization_spec)
+          customization_spec: {},
+          video_label: { name: 'feed' },
+          body_label: { name: 'default' },
+          title_label: { name: 'default' },
+          description_label: { name: 'default' },
+          link_url_label: { name: 'default' },
+          is_default: true,
+        },
+      ],
+    };
+
+    // Add thumbnail images if available
+    if (feedVideo.thumbnailUrl) {
+      assetFeedSpec.videos[0].image_url = feedVideo.thumbnailUrl;
+    }
+    if (reelsVideo.thumbnailUrl) {
+      assetFeedSpec.videos[1].image_url = reelsVideo.thumbnailUrl;
+    }
+
+    const creativeParams: Record<string, any> = {
+      name: params.name,
+      asset_feed_spec: assetFeedSpec,
+      object_story_spec: {
+        page_id: params.pageId,
+      },
+    };
+
+    if (params.instagramUserId) {
+      creativeParams.instagram_user_id = params.instagramUserId;
+    }
+
+    const allVideoIds = params.videos.map((v) => v.videoId).join(',');
+    console.log(`[AdCreatorService] Creating asset_feed_spec creative (4:5 feed + 9:16 reels) with params:`, JSON.stringify(creativeParams, null, 2));
+    const result = await account.createAdCreative([], creativeParams);
+
+    console.log(`[AdCreatorService] Created asset_feed_spec creative: ${result.id} (feed: ${feedVideo.videoId}, reels: ${reelsVideo.videoId})`);
+    return {
+      creativeId: result.id,
+      name: params.name,
+      videoId: allVideoIds,
+      pageId: params.pageId,
+    };
+  }
+
+  /**
+   * Fallback: single-video creative with video_auto_crop for cross-placement.
+   */
+  private async createSingleVideoCreative(
+    params: CreatePlacementMappedCreativeParams,
+    primaryVideo: { videoId: string; thumbnailUrl?: string; ratio: string }
+  ): Promise<AdCreativeResult> {
+    const account = new AdAccount(this.accountId);
+
+    const videoData: Record<string, any> = {
+      video_id: primaryVideo.videoId,
+      call_to_action: {
+        type: params.callToAction || 'LEARN_MORE',
+        value: { link: params.linkUrl },
+      },
+      message: params.primaryText,
+    };
+
+    if (params.headline) videoData.title = params.headline;
+    if (params.description) videoData.link_description = params.description;
+    if (primaryVideo.thumbnailUrl) videoData.image_url = primaryVideo.thumbnailUrl;
+
+    const objectStorySpec: Record<string, any> = {
+      page_id: params.pageId,
+      video_data: videoData,
+    };
+    if (params.instagramUserId) {
+      objectStorySpec.instagram_user_id = params.instagramUserId;
+    }
+
+    const creativeParams: Record<string, any> = {
+      name: params.name,
+      object_story_spec: objectStorySpec,
+      degrees_of_freedom_spec: {
+        creative_features_spec: {
+          video_auto_crop: { enroll_status: 'OPT_IN' },
+        },
+      },
+    };
+
+    if (params.instagramUserId) {
+      creativeParams.instagram_user_id = params.instagramUserId;
+    }
+
+    const allVideoIds = params.videos.map((v) => v.videoId).join(',');
+    console.log(`[AdCreatorService] Creating single-video creative (${primaryVideo.ratio} primary + auto_crop) with params:`, JSON.stringify(creativeParams, null, 2));
+    const result = await account.createAdCreative([], creativeParams);
+
+    console.log(`[AdCreatorService] Created single-video creative: ${result.id} (primary: ${primaryVideo.videoId})`);
+    return {
+      creativeId: result.id,
+      name: params.name,
+      videoId: allVideoIds,
+      pageId: params.pageId,
+    };
+  }
+
   async createAd(params: CreateAdParams): Promise<AdResult> {
     try {
       this.initApi();
@@ -482,6 +757,10 @@ export class AdCreatorService {
       };
 
       if (params.tracking_specs) adParams.tracking_specs = params.tracking_specs;
+      if (params.creative_asset_groups_spec) {
+        adParams.creative_asset_groups_spec = params.creative_asset_groups_spec;
+        console.log(`[AdCreatorService] Using Flexible Ads with creative_asset_groups_spec:`, JSON.stringify(params.creative_asset_groups_spec, null, 2));
+      }
 
       const result = await account.createAd([], adParams);
 

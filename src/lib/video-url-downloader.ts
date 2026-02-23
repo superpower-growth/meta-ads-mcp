@@ -107,11 +107,9 @@ export interface DriveFileInfo {
 }
 
 /**
- * List all files in a Google Drive folder with metadata including video dimensions
+ * List direct children of a Drive folder (non-recursive)
  */
-export async function listDriveFolderFiles(folderId: string): Promise<DriveFileInfo[]> {
-  const token = await getDriveBearerToken();
-
+async function listDriveFolderDirect(folderId: string, token: string): Promise<any[]> {
   const query = `'${folderId}' in parents and trashed = false`;
   const response = await axios.get('https://www.googleapis.com/drive/v3/files', {
     params: {
@@ -119,27 +117,77 @@ export async function listDriveFolderFiles(folderId: string): Promise<DriveFileI
       fields: 'files(id,name,mimeType,size,videoMediaMetadata,imageMediaMetadata)',
       pageSize: 100,
       orderBy: 'createdTime desc',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     },
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
+  return response.data.files || [];
+}
 
-  const files = response.data.files || [];
-  return files.map((f: any) => {
-    const width = f.videoMediaMetadata?.width || f.imageMediaMetadata?.width;
-    const height = f.videoMediaMetadata?.height || f.imageMediaMetadata?.height;
-    let aspectRatio: string | undefined;
-    if (width && height) {
-      const ratio = width / height;
-      if (Math.abs(ratio - 4 / 5) < 0.05) aspectRatio = '4:5';
-      else if (Math.abs(ratio - 9 / 16) < 0.05) aspectRatio = '9:16';
-      else if (Math.abs(ratio - 1) < 0.05) aspectRatio = '1:1';
-      else if (Math.abs(ratio - 16 / 9) < 0.05) aspectRatio = '16:9';
-      else aspectRatio = `${width}:${height}`;
+function parseDriveFile(f: any): DriveFileInfo {
+  const width = f.videoMediaMetadata?.width || f.imageMediaMetadata?.width;
+  const height = f.videoMediaMetadata?.height || f.imageMediaMetadata?.height;
+  let aspectRatio: string | undefined;
+  if (width && height) {
+    const ratio = width / height;
+    if (Math.abs(ratio - 4 / 5) < 0.05) aspectRatio = '4:5';
+    else if (Math.abs(ratio - 9 / 16) < 0.05) aspectRatio = '9:16';
+    else if (Math.abs(ratio - 1) < 0.05) aspectRatio = '1:1';
+    else if (Math.abs(ratio - 16 / 9) < 0.05) aspectRatio = '16:9';
+    else aspectRatio = `${width}:${height}`;
+  }
+  return { id: f.id, name: f.name, mimeType: f.mimeType, size: f.size, width, height, aspectRatio };
+}
+
+/**
+ * List all files in a Google Drive folder with metadata including video dimensions.
+ * Prioritizes "export" subfolder if present (contains final deliverables).
+ * Falls back to recursive traversal (max depth 3) if no export folder exists.
+ */
+export async function listDriveFolderFiles(folderId: string): Promise<DriveFileInfo[]> {
+  const token = await getDriveBearerToken();
+
+  // Check top-level for an "export" folder first
+  const topLevel = await listDriveFolderDirect(folderId, token);
+  console.log(`[video-downloader] Folder ${folderId} (root): ${topLevel.length} items`);
+
+  const exportFolder = topLevel.find(
+    f => f.mimeType === 'application/vnd.google-apps.folder' &&
+         f.name.toLowerCase().includes('export'),
+  );
+
+  if (exportFolder) {
+    console.log(`[video-downloader] Found export folder: "${exportFolder.name}" — using it exclusively`);
+    const exportFiles = await listDriveFolderDirect(exportFolder.id, token);
+    console.log(`[video-downloader] Export folder contains ${exportFiles.length} files`);
+    return exportFiles
+      .filter((f: any) => f.mimeType !== 'application/vnd.google-apps.folder')
+      .map(parseDriveFile);
+  }
+
+  // No export folder — fall back to recursive traversal
+  console.log(`[video-downloader] No export folder found, traversing all subfolders`);
+  const allFiles: DriveFileInfo[] = [];
+
+  async function traverse(id: string, depth: number): Promise<void> {
+    if (depth > 3) return;
+    const files = depth === 0 ? topLevel : await listDriveFolderDirect(id, token);
+    if (depth > 0) console.log(`[video-downloader] Folder ${id} (depth ${depth}): ${files.length} items`);
+    for (const f of files) {
+      if (f.mimeType === 'application/vnd.google-apps.folder') {
+        console.log(`[video-downloader] Entering subfolder: "${f.name}"`);
+        await traverse(f.id, depth + 1);
+      } else {
+        allFiles.push(parseDriveFile(f));
+      }
     }
-    return { id: f.id, name: f.name, mimeType: f.mimeType, size: f.size, width, height, aspectRatio };
-  });
+  }
+
+  await traverse(folderId, 0);
+  return allFiles;
 }
 
 /**
@@ -166,7 +214,7 @@ export async function downloadDriveFile(fileId: string): Promise<DownloadResult>
 
   const response = await axios({
     method: 'GET',
-    url: `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    url: `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
     responseType: 'stream',
     timeout: 120000,
     headers: {

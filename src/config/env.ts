@@ -10,11 +10,12 @@ import { z } from 'zod';
 const envSchema = z.object({
   META_ACCESS_TOKEN: z
     .string()
-    .min(1, 'META_ACCESS_TOKEN environment variable is required. See .env.example for setup.'),
+    .min(1, 'META_ACCESS_TOKEN or FACEBOOK_MARKETING_API environment variable is required. See .env.example for setup.'),
   META_AD_ACCOUNT_ID: z
     .string()
-    .min(1, 'META_AD_ACCOUNT_ID environment variable is required. See .env.example for setup.')
-    .regex(/^act_\d+$/, 'META_AD_ACCOUNT_ID must be in format: act_123456789'),
+    .optional()
+    .refine((val) => !val || /^act_\d+$/.test(val), 'META_AD_ACCOUNT_ID must be in format: act_123456789')
+    .default(''),
   PORT: z
     .string()
     .optional()
@@ -30,17 +31,20 @@ const envSchema = z.object({
     .default('development'),
   FACEBOOK_APP_ID: z
     .string()
-    .min(1, 'FACEBOOK_APP_ID environment variable is required for OAuth. See .env.example for setup.'),
+    .min(1)
+    .optional(),
   FACEBOOK_APP_SECRET: z
     .string()
-    .min(1, 'FACEBOOK_APP_SECRET environment variable is required for OAuth. See .env.example for setup.'),
+    .min(1)
+    .optional(),
   FACEBOOK_CALLBACK_URL: z
     .string()
     .url('FACEBOOK_CALLBACK_URL must be a valid URL')
     .default('http://localhost:3000/auth/callback'),
   SESSION_SECRET: z
     .string()
-    .min(32, 'SESSION_SECRET must be at least 32 characters for security. Generate with: openssl rand -base64 32'),
+    .min(1)
+    .default('fly-io-default-session-secret-change-me-in-prod-32chars'),
   SESSION_TTL: z
     .string()
     .optional()
@@ -101,7 +105,30 @@ const envSchema = z.object({
     .string()
     .url()
     .optional()
-    .default('https://meta-ads-mcp-production-3b99.up.railway.app/auth/google/callback'),
+    .default('https://sp-meta-ads-mcp.fly.dev/auth/google/callback'),
+
+  // Pipeline Configuration (for auto-pilot ad processing)
+  ANTHROPIC_API_KEY: z
+    .string()
+    .optional(),
+  NOTION_API_KEY: z
+    .string()
+    .optional(),
+  NOTION_MEDIA_DB_ID: z
+    .string()
+    .default('2748444481d08045b714e036096a4c5a'),
+  PIPELINE_POLL_INTERVAL_MS: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .default(300000),
+  PIPELINE_MAX_CONCURRENCY: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .default(3),
 
   // Ship Ad API Configuration (for n8n automation)
   SHIP_AD_API_KEY: z
@@ -119,13 +146,17 @@ const envSchema = z.object({
   DEFAULT_AD_SET_ID: z
     .string()
     .optional(),
+  DEFAULT_SAVED_AUDIENCE_ID: z
+    .string()
+    .optional()
+    .default('120238775760670172'),
 });
 
 // Parse and validate environment variables
 const parseEnv = () => {
   try {
     const parsed = envSchema.parse({
-      META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN,
+      META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || process.env.FACEBOOK_MARKETING_API,
       META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID,
       PORT: process.env.PORT,
       HOST: process.env.HOST,
@@ -146,11 +177,17 @@ const parseEnv = () => {
       GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
       GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
       GOOGLE_OAUTH_CALLBACK_URL: process.env.GOOGLE_OAUTH_CALLBACK_URL,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      NOTION_API_KEY: process.env.NOTION_API_KEY,
+      NOTION_MEDIA_DB_ID: process.env.NOTION_MEDIA_DB_ID,
+      PIPELINE_POLL_INTERVAL_MS: process.env.PIPELINE_POLL_INTERVAL_MS,
+      PIPELINE_MAX_CONCURRENCY: process.env.PIPELINE_MAX_CONCURRENCY,
       SHIP_AD_API_KEY: process.env.SHIP_AD_API_KEY,
       DEFAULT_PAGE_ID: process.env.DEFAULT_PAGE_ID,
       DEFAULT_INSTAGRAM_ACTOR_ID: process.env.DEFAULT_INSTAGRAM_ACTOR_ID,
       DEFAULT_CAMPAIGN_ID: process.env.DEFAULT_CAMPAIGN_ID,
       DEFAULT_AD_SET_ID: process.env.DEFAULT_AD_SET_ID,
+      DEFAULT_SAVED_AUDIENCE_ID: process.env.DEFAULT_SAVED_AUDIENCE_ID,
     });
 
     // Validation: Require GEMINI_API_KEY if not using Vertex AI

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "meta-ads-mcp": {
+      "type": "url",
+      "url": "https://sp-meta-ads-mcp.fly.dev/mcp"
+    },
+    "n8n": {
+      "type": "url",
+      "url": "https://n8n.superpower.com/mcp-server/http"
+    }
+  }
+}

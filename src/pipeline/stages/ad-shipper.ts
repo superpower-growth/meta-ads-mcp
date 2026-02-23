@@ -28,7 +28,7 @@ export interface ShipAdRowInput {
   angle: string;
   format: string;
   messenger: string;
-  landingPageUrl: string;
+  landingPageUrl?: string;
   campaignId: string;
   adSetName: string;
   dryRun: boolean;
@@ -139,11 +139,31 @@ async function resolveAdSet(
       status: 'PAUSED',
       billing_event: cloned?.billing_event || 'IMPRESSIONS',
       optimization_goal: cloned?.optimization_goal || 'REACH',
-      daily_budget: '20000', // $200/day in cents
     };
 
-    if (cloned?.targeting) createParams.targeting = cloned.targeting;
+    // Only set ad set budget if campaign doesn't use CBO
+    const isCBO = await service.isCampaignBudgetOptimization(campaignId);
+    if (!isCBO) {
+      createParams.daily_budget = '20000'; // $200/day in cents
+    } else {
+      console.log(`[ad-shipper] Campaign uses CBO, skipping ad set budget`);
+    }
+
+    if (cloned?.targeting) {
+      createParams.targeting = cloned.targeting;
+    } else {
+      // Use saved audience as default targeting
+      createParams.saved_audience_id = env.DEFAULT_SAVED_AUDIENCE_ID;
+      console.log(`[ad-shipper] No existing adsets to clone targeting from, using saved audience ${env.DEFAULT_SAVED_AUDIENCE_ID}`);
+    }
     if (cloned?.promoted_object) createParams.promoted_object = cloned.promoted_object;
+
+    // Attribution: 7-day click, 1-day engaged view, 1-day view
+    createParams.attribution_spec = [
+      { event_type: 'CLICK_THROUGH', window_days: 7 },
+      { event_type: 'VIEW_THROUGH', window_days: 1 },
+      { event_type: 'ENGAGED_VIDEO_VIEW', window_days: 1 },
+    ];
 
     const result = await service.createAdSet(createParams);
     console.log(`[ad-shipper] Created new adset: ${result.adSetId} "${adSetName}"`);
@@ -242,10 +262,19 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
     });
     console.log(`[ad-shipper] Copy generated: "${copyResult.headline}" (revised: ${copyResult.reviewLog.revised})`);
 
+    // Build landing page URL (from input or default)
+    const rawLandingUrl = input.landingPageUrl || 'superpower.com';
+    const landingUrl = rawLandingUrl.startsWith('http')
+      ? rawLandingUrl
+      : `https://${rawLandingUrl}`;
+
+    // Append UTM parameters (Meta dynamic macros)
+    const utmParams = 'utm_source=meta&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{ad.name}}';
+    const linkUrlWithUtm = landingUrl.includes('?')
+      ? `${landingUrl}&${utmParams}`
+      : `${landingUrl}?${utmParams}`;
+
     // Append landing page URL to primary text
-    const landingUrl = input.landingPageUrl.startsWith('http')
-      ? input.landingPageUrl
-      : `https://${input.landingPageUrl}`;
     const primaryTextWithUrl = `${copyResult.primaryText}\n\n${landingUrl}`;
 
     // Step 5: If dry run, return here
@@ -269,18 +298,17 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
     // Step 7: Generate signed URLs and upload to Meta
     const pageId = env.DEFAULT_PAGE_ID;
     if (!pageId) throw new Error('DEFAULT_PAGE_ID not configured');
+    const instagramUserId = env.DEFAULT_INSTAGRAM_ACTOR_ID;
 
-    const adIds: string[] = [];
-    const creativeIds: string[] = [];
     const videoIds: string[] = [];
 
     // Upload 4:5 (and 9:16 if available) to Meta in parallel
-    const uploadPromises: Promise<{ videoId: string; ratio: string }>[] = [];
+    const uploadPromises: Promise<{ videoId: string; ratio: string; thumbnailUrl?: string }>[] = [];
 
     uploadPromises.push(
       getSignedUrl(gcsPath4x5).then(async (url) => {
         const result = await service.uploadVideo(url, `${deliverableName} - 4:5`);
-        return { videoId: result.videoId, ratio: '4:5' };
+        return { videoId: result.videoId, ratio: '4:5', thumbnailUrl: result.thumbnailUrl };
       })
     );
 
@@ -288,7 +316,7 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
       uploadPromises.push(
         getSignedUrl(gcsPath9x16).then(async (url) => {
           const result = await service.uploadVideo(url, `${deliverableName} - 9:16`);
-          return { videoId: result.videoId, ratio: '9:16' };
+          return { videoId: result.videoId, ratio: '9:16', thumbnailUrl: result.thumbnailUrl };
         })
       );
     }
@@ -298,30 +326,59 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
       videoIds.push(u.videoId);
     }
 
-    // Step 8: Create creatives and ads for each uploaded video
-    for (const upload of uploads) {
-      const creative = await service.createAdCreative({
-        name: `${deliverableName} - ${upload.ratio} Creative`,
+    // Step 8: Create creative and ad
+    const creativeIds: string[] = [];
+    const adIds: string[] = [];
+
+    if (uploads.length > 1) {
+      // Multiple formats — use 9:16 as primary (native for Stories/Reels) with video_auto_crop for Feed
+      const creative = await service.createPlacementMappedCreative({
+        name: `${deliverableName} Creative`,
         pageId,
-        instagramActorId: env.DEFAULT_INSTAGRAM_ACTOR_ID,
-        videoId: upload.videoId,
+        instagramUserId,
+        videos: uploads.map((u) => ({ videoId: u.videoId, thumbnailUrl: u.thumbnailUrl, ratio: u.ratio })),
         primaryText: primaryTextWithUrl,
         headline: copyResult.headline,
+        description: copyResult.description,
         callToAction: 'LEARN_MORE',
-        linkUrl: landingUrl,
+        linkUrl: linkUrlWithUtm,
       });
       creativeIds.push(creative.creativeId);
 
       const ad = await service.createAd({
         adset_id: adSetId,
         creative_id: creative.creativeId,
-        name: `${deliverableName} - ${upload.ratio}`,
+        name: deliverableName,
+        status: 'PAUSED',
+      });
+      adIds.push(ad.adId);
+    } else {
+      // Single format — use standard creative
+      const upload = uploads[0];
+      const creative = await service.createAdCreative({
+        name: `${deliverableName} Creative`,
+        pageId,
+        instagramUserId,
+        videoId: upload.videoId,
+        primaryText: primaryTextWithUrl,
+        headline: copyResult.headline,
+        description: copyResult.description,
+        callToAction: 'LEARN_MORE',
+        linkUrl: linkUrlWithUtm,
+        thumbnailUrl: upload.thumbnailUrl,
+      });
+      creativeIds.push(creative.creativeId);
+
+      const ad = await service.createAd({
+        adset_id: adSetId,
+        creative_id: creative.creativeId,
+        name: deliverableName,
         status: 'PAUSED',
       });
       adIds.push(ad.adId);
     }
 
-    console.log(`[ad-shipper] Shipped "${deliverableName}": ${adIds.length} ads created`);
+    console.log(`[ad-shipper] Shipped "${deliverableName}": ${adIds.length} ad(s), ${uploads.length} video format(s)`);
 
     return {
       id,

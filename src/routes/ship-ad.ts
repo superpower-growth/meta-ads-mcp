@@ -182,7 +182,7 @@ router.post('/ship-ad', async (req: Request, res: Response) => {
     const creativeResult = await service.createAdCreative({
       name: `${body.adName} - Creative`,
       pageId: pageId,
-      instagramActorId: env.DEFAULT_INSTAGRAM_ACTOR_ID,
+      instagramUserId: env.DEFAULT_INSTAGRAM_ACTOR_ID,
       videoId: videoResult.videoId,
       primaryText: body.primaryText || body.adName,
       headline: body.headline,

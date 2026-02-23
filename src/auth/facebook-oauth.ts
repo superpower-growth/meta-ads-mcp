@@ -23,6 +23,9 @@ export interface FacebookUser {
  * Generate Facebook OAuth authorization URL
  */
 export function getAuthorizationUrl(state?: string): string {
+  if (!env.FACEBOOK_APP_ID) {
+    throw new Error('FACEBOOK_APP_ID not configured. Set it to enable OAuth.');
+  }
   const params = new URLSearchParams({
     client_id: env.FACEBOOK_APP_ID,
     redirect_uri: env.FACEBOOK_CALLBACK_URL,
@@ -38,6 +41,9 @@ export function getAuthorizationUrl(state?: string): string {
  * Exchange authorization code for access token
  */
 async function exchangeCodeForToken(code: string): Promise<string> {
+  if (!env.FACEBOOK_APP_ID || !env.FACEBOOK_APP_SECRET) {
+    throw new Error('FACEBOOK_APP_ID and FACEBOOK_APP_SECRET not configured. Set them to enable OAuth.');
+  }
   const params = new URLSearchParams({
     client_id: env.FACEBOOK_APP_ID,
     client_secret: env.FACEBOOK_APP_SECRET,
