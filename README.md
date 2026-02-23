@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that provides access to Meta Marketing API for comprehensive ad analytics. Use the hosted instance with Claude Code in 30 seconds, or run your own.
 
-**🚀 Live Instance:** `https://meta-ads-mcp-production-3b99.up.railway.app/mcp`
+**🚀 Live Instance:** `https://sp-meta-ads-mcp.fly.dev/mcp`
 
 ## Features
 
@@ -68,7 +68,7 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 ### Method 1: One Command (Recommended)
 
 ```bash
-claude add https://meta-ads-mcp-production-3b99.up.railway.app/mcp
+claude add https://sp-meta-ads-mcp.fly.dev/mcp
 ```
 
 That's it! Now try asking in Claude Code:
@@ -88,7 +88,7 @@ If `claude add` doesn't work, edit `~/.config/claude-code/mcp.json`:
 {
   "mcpServers": {
     "meta-ads": {
-      "url": "https://meta-ads-mcp-production-3b99.up.railway.app/mcp",
+      "url": "https://sp-meta-ads-mcp.fly.dev/mcp",
       "transport": "http"
     }
   }
@@ -115,7 +115,7 @@ Share this link with your team: [ONBOARDING.md](./ONBOARDING.md)
 
 Or send them this simple instruction:
 ```
-Run: claude add https://meta-ads-mcp-production-3b99.up.railway.app/mcp
+Run: claude add https://sp-meta-ads-mcp.fly.dev/mcp
 ```
 
 ---
@@ -158,7 +158,7 @@ npm start
 - ✅ Claude handles OAuth automatically
 - ✅ Just add the URL to Claude Code settings
 - ✅ No cookies, no manual authentication
-- URL: `https://meta-ads-mcp-production-3b99.up.railway.app/mcp`
+- URL: `https://sp-meta-ads-mcp.fly.dev/mcp`
 
 ### 2. Run Locally (Development)
 **Best for:** Developers customizing the code
