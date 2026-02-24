@@ -17,6 +17,7 @@ import { compareTimePeriodsTool } from './compare-time-periods.js';
 import { compareEntitiesTool } from './compare-entities.js';
 import { getAdCreativeTextTool } from './get-ad-creative-text.js';
 import { analyzeVideoCreativeTool } from './analyze-video-creative.js';
+import { batchAnalyzeVideoCreativeTool } from './batch-analyze-video-creative.js';
 import { getPlacementConversionsTool } from './get-placement-conversions.js';
 import { getSavedAudiencesTool } from './get-saved-audiences.js';
 import { getFacebookPagesTool } from './get-facebook-pages.js';
@@ -46,6 +47,7 @@ export const tools: Tool[] = [
   compareEntitiesTool,
   getAdCreativeTextTool,
   analyzeVideoCreativeTool,
+  batchAnalyzeVideoCreativeTool,
   getPlacementConversionsTool,
   getSavedAudiencesTool,
   getFacebookPagesTool,

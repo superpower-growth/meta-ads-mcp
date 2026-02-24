@@ -42,6 +42,7 @@ import { compareTimePeriods } from './tools/compare-time-periods.js';
 import { compareEntities } from './tools/compare-entities.js';
 import { getAdCreativeText } from './tools/get-ad-creative-text.js';
 import { analyzeVideoCreative } from './tools/analyze-video-creative.js';
+import { batchAnalyzeVideoCreative } from './tools/batch-analyze-video-creative.js';
 import { getPlacementConversions } from './tools/get-placement-conversions.js';
 import { getSavedAudiences } from './tools/get-saved-audiences.js';
 import { getFacebookPages } from './tools/get-facebook-pages.js';
@@ -210,6 +211,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: result,
             },
           ],
+        };
+      }
+      case 'batch-analyze-video-creative': {
+        const result = await batchAnalyzeVideoCreative(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
         };
       }
       case 'get-placement-conversions': {
