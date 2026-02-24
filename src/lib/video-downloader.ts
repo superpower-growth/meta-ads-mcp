@@ -52,6 +52,9 @@ export interface VideoMetadata {
  */
 export async function getVideoMetadata(adId: string): Promise<VideoMetadata | null> {
   try {
+    // Re-initialize API to ensure token is available (ES module initialization issue)
+    FacebookAdsApi.init(env.META_ACCESS_TOKEN);
+
     // Get ad with creative and preview URL (for fallback)
     const ad = new Ad(adId);
     const adData = await ad.read([
@@ -94,9 +97,7 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
 
     // Query video node using direct API call (NOT AdVideo class)
     // AdVideo class is for uploads only, use direct API call for retrieval
-    // Re-initialize API to ensure token is available (ES module initialization issue)
-    const freshApi = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
-    const videoResponse = await freshApi.call(
+    const videoResponse = await FacebookAdsApi.init(env.META_ACCESS_TOKEN).call(
       'GET',
       `/${videoId}`,
       {
