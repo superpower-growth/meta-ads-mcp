@@ -93,6 +93,12 @@ const envSchema = z.object({
     .number()
     .positive()
     .default(0.10),
+  GEMINI_MAX_CONCURRENT_ANALYSES: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .default(2),
 
   // Google OAuth Configuration (for Drive API access without per-folder sharing)
   GOOGLE_OAUTH_CLIENT_ID: z
@@ -174,6 +180,7 @@ const parseEnv = () => {
       GEMINI_MODEL: process.env.GEMINI_MODEL,
       GEMINI_USE_VERTEX_AI: process.env.GEMINI_USE_VERTEX_AI,
       GEMINI_MAX_COST_PER_ANALYSIS: process.env.GEMINI_MAX_COST_PER_ANALYSIS,
+      GEMINI_MAX_CONCURRENT_ANALYSES: process.env.GEMINI_MAX_CONCURRENT_ANALYSES,
       GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
       GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
       GOOGLE_OAUTH_CALLBACK_URL: process.env.GOOGLE_OAUTH_CALLBACK_URL,

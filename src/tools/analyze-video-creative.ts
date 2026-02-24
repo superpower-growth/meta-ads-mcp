@@ -315,7 +315,7 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
  */
 export const analyzeVideoCreativeTool: Tool = {
   name: 'analyze-video-creative',
-  description: 'Analyze video ad creative content using Gemini AI. Returns structured insights including scenes, text overlays, emotional tone, creative approach, and target audience indicators. Requires Gemini API key or Vertex AI configuration.',
+  description: 'Analyze video ad creative content using Gemini AI. Returns structured insights including scenes, text overlays, emotional tone, creative approach, target audience indicators, spoken audio transcript with timestamps, and spoken messaging theme analysis (e.g. social-proof, pain-agitate-solve, benefit-driven). Requires Gemini API key or Vertex AI configuration.',
   inputSchema: {
     type: 'object' as const,
     properties: {

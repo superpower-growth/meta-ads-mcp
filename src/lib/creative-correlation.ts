@@ -88,7 +88,7 @@ export interface CreativeDimensionPerformance {
  */
 export function groupByCreativeDimension(
   ads: EnrichedAd[],
-  dimension: 'emotionalTone' | 'creativeApproach' | 'callToAction' | 'productPresentation'
+  dimension: 'emotionalTone' | 'creativeApproach' | 'callToAction' | 'productPresentation' | 'spokenTheme'
 ): CreativeDimensionPerformance[] {
   // Group ads by dimension value
   const groups = new Map<string, EnrichedAd[]>();
@@ -169,6 +169,7 @@ export function identifyTopCreativePatterns(
   emotionalTone: CreativeDimensionPerformance[];
   creativeApproach: CreativeDimensionPerformance[];
   callToAction: CreativeDimensionPerformance[];
+  spokenTheme: CreativeDimensionPerformance[];
 } {
   const emotionalTone = groupByCreativeDimension(ads, 'emotionalTone')
     .filter(p => p.adCount >= minAdCount);
@@ -179,10 +180,14 @@ export function identifyTopCreativePatterns(
   const callToAction = groupByCreativeDimension(ads, 'callToAction')
     .filter(p => p.adCount >= minAdCount);
 
+  const spokenTheme = groupByCreativeDimension(ads, 'spokenTheme')
+    .filter(p => p.adCount >= minAdCount);
+
   return {
     emotionalTone,
     creativeApproach,
     callToAction,
+    spokenTheme,
   };
 }
 
@@ -218,22 +223,30 @@ export function findSimilarHighPerformers(
     let score = 0;
     let maxScore = 0;
 
-    // Emotional tone match (weight: 0.3)
-    maxScore += 0.3;
+    // Emotional tone match (weight: 0.25)
+    maxScore += 0.25;
     if (ad.analysis.emotionalTone === targetAd.analysis.emotionalTone) {
-      score += 0.3;
+      score += 0.25;
     }
 
-    // Creative approach match (weight: 0.4)
-    maxScore += 0.4;
+    // Creative approach match (weight: 0.30)
+    maxScore += 0.30;
     if (ad.analysis.creativeApproach === targetAd.analysis.creativeApproach) {
-      score += 0.4;
+      score += 0.30;
     }
 
-    // Call to action match (weight: 0.3)
-    maxScore += 0.3;
+    // Call to action match (weight: 0.25)
+    maxScore += 0.25;
     if (ad.analysis.callToAction === targetAd.analysis.callToAction) {
-      score += 0.3;
+      score += 0.25;
+    }
+
+    // Spoken theme match (weight: 0.20, conditional on both ads having it)
+    if (ad.analysis.spokenTheme && targetAd.analysis.spokenTheme) {
+      maxScore += 0.20;
+      if (ad.analysis.spokenTheme === targetAd.analysis.spokenTheme) {
+        score += 0.20;
+      }
     }
 
     const normalizedScore = score / maxScore;
@@ -302,6 +315,16 @@ export function generateCorrelationSummary(
     lines.push('## Top CTAs by CTR\n');
     for (let i = 0; i < Math.min(3, patterns.callToAction.length); i++) {
       const p = patterns.callToAction[i];
+      lines.push(`${i + 1}. **${p.value}** - ${p.adCount} ads, ${(p.avgCtr * 100).toFixed(2)}% CTR, $${p.avgCpc.toFixed(2)} CPC`);
+    }
+    lines.push('');
+  }
+
+  // Spoken theme insights
+  if (patterns.spokenTheme.length > 0) {
+    lines.push('## Top Spoken Messaging Themes by CTR\n');
+    for (let i = 0; i < Math.min(3, patterns.spokenTheme.length); i++) {
+      const p = patterns.spokenTheme[i];
       lines.push(`${i + 1}. **${p.value}** - ${p.adCount} ads, ${(p.avgCtr * 100).toFixed(2)}% CTR, $${p.avgCpc.toFixed(2)} CPC`);
     }
     lines.push('');
@@ -381,6 +404,64 @@ export function analyzeKeyMessagePatterns(
   }
 
   // Sort by average CTR descending
+  return results.sort((a, b) => b.avgCtr - a.avgCtr);
+}
+
+/**
+ * Identify frequently used spoken messages and their performance
+ * Same shape as analyzeKeyMessagePatterns but reads from spokenThemeDetails.keySpokenMessages
+ *
+ * @param ads - Array of ads with both creative analysis and performance metrics
+ * @param minAdCount - Minimum number of ads required to consider a message pattern (default: 2)
+ * @returns Array of spoken message patterns sorted by average CTR (descending)
+ */
+export function analyzeSpokenMessagePatterns(
+  ads: EnrichedAd[],
+  minAdCount: number = 2
+): KeyMessagePattern[] {
+  const messageMap = new Map<string, EnrichedAd[]>();
+
+  for (const ad of ads) {
+    const spokenMessages = ad.analysis.spokenThemeDetails?.keySpokenMessages;
+    if (!spokenMessages) continue;
+
+    for (const msg of spokenMessages) {
+      const normalized = msg.toLowerCase().trim();
+      if (!messageMap.has(normalized)) {
+        messageMap.set(normalized, []);
+      }
+      messageMap.get(normalized)!.push(ad);
+    }
+  }
+
+  const results: KeyMessagePattern[] = [];
+
+  for (const [message, adsWithMessage] of messageMap) {
+    if (adsWithMessage.length < minAdCount) continue;
+
+    const adCount = adsWithMessage.length;
+    const adIds = adsWithMessage.map(a => a.adId);
+
+    let totalCtr = 0;
+    let totalCpc = 0;
+    let totalSpend = 0;
+
+    for (const ad of adsWithMessage) {
+      totalCtr += ad.metrics.ctr || 0;
+      totalCpc += ad.metrics.cpc || 0;
+      totalSpend += ad.metrics.spend || 0;
+    }
+
+    results.push({
+      message,
+      adCount,
+      avgCtr: totalCtr / adCount,
+      avgCpc: totalCpc / adCount,
+      totalSpend,
+      adIds,
+    });
+  }
+
   return results.sort((a, b) => b.avgCtr - a.avgCtr);
 }
 
