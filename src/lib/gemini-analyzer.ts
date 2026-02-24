@@ -14,6 +14,10 @@ import pLimit from 'p-limit';
 // Semaphore: only 1 concurrent Gemini File API upload at a time to avoid OOM on 2GB Fly.io
 const uploadLimit = pLimit(1);
 
+// Concurrency limit for full analysis pipeline (upload + Gemini generateContent)
+// Prevents hitting Gemini RPM limits when batch-analyzing multiple videos
+const analysisLimit = pLimit(env.GEMINI_MAX_CONCURRENT_ANALYSES);
+
 /**
  * Video analysis schema - defines the structure of analysis results
  */
@@ -34,7 +38,21 @@ const VideoAnalysisSchema = z.object({
   productPresentation: z.string(),
   callToAction: z.string(),
   targetAudienceIndicators: z.array(z.string()),
-  keyMessages: z.array(z.string()) // Main value propositions
+  keyMessages: z.array(z.string()), // Main value propositions
+  // Spoken content analysis (optional — omitted for videos with no speech)
+  transcript: z.array(z.object({
+    timestamp: z.string(),   // MM:SS
+    speaker: z.string(),     // "narrator", "voiceover", "speaker_1", etc.
+    text: z.string(),
+  })).optional(),
+  spokenTheme: z.string().optional(), // e.g.: "social-proof", "urgency-scarcity", "pain-agitate-solve", etc.
+  spokenThemeDetails: z.object({
+    primaryTheme: z.string(),
+    secondaryThemes: z.array(z.string()),
+    hookStatement: z.string(),
+    spokenCta: z.string(),
+    keySpokenMessages: z.array(z.string()),
+  }).optional(),
 });
 
 export type VideoAnalysis = z.infer<typeof VideoAnalysisSchema>;
@@ -75,7 +93,31 @@ const geminiAnalysisSchema = {
     productPresentation: { type: 'string' },
     callToAction: { type: 'string' },
     targetAudienceIndicators: { type: 'array', items: { type: 'string' } },
-    keyMessages: { type: 'array', items: { type: 'string' } }
+    keyMessages: { type: 'array', items: { type: 'string' } },
+    transcript: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          timestamp: { type: 'string' },
+          speaker: { type: 'string' },
+          text: { type: 'string' },
+        },
+        required: ['timestamp', 'speaker', 'text'],
+      },
+    },
+    spokenTheme: { type: 'string' },
+    spokenThemeDetails: {
+      type: 'object',
+      properties: {
+        primaryTheme: { type: 'string' },
+        secondaryThemes: { type: 'array', items: { type: 'string' } },
+        hookStatement: { type: 'string' },
+        spokenCta: { type: 'string' },
+        keySpokenMessages: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['primaryTheme', 'secondaryThemes', 'hookStatement', 'spokenCta', 'keySpokenMessages'],
+    },
   },
   required: ['scenes', 'textOverlays', 'emotionalTone', 'creativeApproach']
 };
@@ -102,6 +144,16 @@ EMOTIONAL & CREATIVE ANALYSIS:
 - Call-to-action elements and messaging
 - Target audience indicators (age, lifestyle, interests)
 - Key value propositions and messages
+
+SPOKEN CONTENT ANALYSIS:
+- Transcribe all spoken audio (voiceover, dialogue, on-screen speech) with timestamps (MM:SS)
+- Identify speaker roles (narrator, voiceover, testimonial speaker, etc.)
+- Identify the primary spoken messaging theme from: social-proof, urgency-scarcity, pain-agitate-solve, benefit-driven, storytelling, authority-expertise, comparison, question-hook, direct-offer
+- Note secondary spoken themes
+- Extract the opening hook statement (first words that grab attention)
+- Extract the verbal call-to-action
+- List key spoken value propositions (distinct from text overlay messages)
+- If the video has no spoken audio, omit transcript and spokenTheme fields entirely
 
 Format your response as structured JSON matching the schema provided.`;
 
@@ -288,11 +340,11 @@ export async function analyzeVideo(gcsPath: string): Promise<VideoAnalysis> {
   }
 
   try {
-    // Wrap analysis in retry logic
-    return await retryWithBackoff(
+    // Wrap analysis in concurrency limiter + retry logic
+    return await analysisLimit(() => retryWithBackoff(
       () => analyzeVideoInternal(gcsPath),
       { maxRetries: 3, baseDelayMs: 2000 } // 2s, 4s, 8s backoff
-    );
+    ));
   } catch (error) {
     // Enhanced error logging
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -323,8 +375,8 @@ export function estimateAnalysisCost(videoDurationSeconds: number): number {
   // Calculate input tokens
   const inputTokens = videoDurationSeconds * framesPerSecond * tokensPerFrame;
 
-  // Estimate output tokens (typically ~1K for structured analysis)
-  const outputTokens = 1000;
+  // Estimate output tokens (typically ~2K for structured analysis with transcript)
+  const outputTokens = 2000;
 
   // Model pricing (per 1M tokens)
   const pricing = geminiConfig.model === 'gemini-2.5-flash'
