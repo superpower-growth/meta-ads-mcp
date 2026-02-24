@@ -99,7 +99,7 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
     // AdVideo class is for uploads only, use direct API call for retrieval
     const videoResponse = await FacebookAdsApi.init(env.META_ACCESS_TOKEN).call(
       'GET',
-      `/${videoId}`,
+      [videoId],
       {
         fields: 'source,picture,length,updated_time,permalink_url,format,thumbnails,status'
       }
