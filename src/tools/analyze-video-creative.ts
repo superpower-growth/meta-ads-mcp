@@ -11,8 +11,8 @@
 
 import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { downloadAndUploadVideo, getVideoMetadata } from '../lib/video-downloader.js';
-import { analyzeVideoWithCostGuard, estimateAnalysisCost, type VideoAnalysis } from '../lib/gemini-analyzer.js';
+import { getVideoMetadata } from '../lib/video-downloader.js';
+import { analyzeVideoFromUrl, estimateAnalysisCost, type VideoAnalysis } from '../lib/gemini-analyzer.js';
 import { isGeminiEnabled } from '../lib/gemini-client.js';
 import { getCached, setCached } from '../lib/firestore-cache.js';
 import { env } from '../config/env.js';
@@ -147,60 +147,10 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
     const estimatedCost = estimateAnalysisCost(metadata.duration);
     console.log(`Analyzing video ${metadata.videoId} for ad ${args.adId}: estimated cost $${estimatedCost.toFixed(4)} (${metadata.duration}s)`);
 
-    // Download and upload video to GCS
-    let gcsPath;
-    try {
-      gcsPath = await downloadAndUploadVideo(args.adId);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // Check for URL expiration
-      if (errorMessage.includes('expired') || errorMessage.includes('403') || errorMessage.includes('404')) {
-        console.error(`Video URL may have expired for ad ${args.adId}, video ${metadata.videoId}: ${errorMessage}`);
-        const response: AnalyzeVideoCreativeResponse = {
-          adId: args.adId,
-          videoId: metadata.videoId,
-          analysis: null,
-          message: 'Video URL expired. Meta video URLs are temporary. Please retry to fetch a fresh URL.'
-        };
-        return JSON.stringify(response, null, 2);
-      }
-
-      // Check for GCS configuration issues
-      if (errorMessage.includes('GCP') || errorMessage.includes('bucket') || errorMessage.includes('credentials')) {
-        console.error(`GCS configuration error for ad ${args.adId}, video ${metadata.videoId}: ${errorMessage}`);
-        const response: AnalyzeVideoCreativeResponse = {
-          adId: args.adId,
-          videoId: metadata.videoId,
-          analysis: null,
-          message: `GCS configuration error: ${errorMessage}. Check GOOGLE_SERVICE_ACCOUNT_JSON and bucket permissions.`
-        };
-        return JSON.stringify(response, null, 2);
-      }
-
-      // Generic download/upload error
-      console.error(`Video download/upload failed for ad ${args.adId}, video ${metadata.videoId}: ${errorMessage}`);
-      throw error;
-    }
-
-    if (!gcsPath) {
-      const response: AnalyzeVideoCreativeResponse = {
-        adId: args.adId,
-        videoId: metadata.videoId,
-        analysis: null,
-        message: 'Failed to download video from Meta API or upload to GCS.'
-      };
-      console.error(`Video download/upload returned null for ad ${args.adId}, video ${metadata.videoId}`);
-      return JSON.stringify(response, null, 2);
-    }
-
-    console.log(`Video ${metadata.videoId} downloaded and uploaded to ${gcsPath}`);
-
-
-    // Analyze video with cost guard
+    // Analyze video directly from URL (no GCS download needed)
     let analysis: VideoAnalysis;
     try {
-      analysis = await analyzeVideoWithCostGuard(gcsPath, metadata.duration);
+      analysis = await analyzeVideoFromUrl(metadata.videoUrl, metadata.duration);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -265,7 +215,7 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
         videoId: metadata.videoId,
         adId: args.adId,
         analysisResults: analysis,
-        gcsPath,
+        gcsPath: '', // No GCS path — video analyzed directly from URL
       });
       const expiresAt = new Date(Date.now() + env.FIRESTORE_CACHE_TTL_HOURS * 60 * 60 * 1000);
       console.log(`Cached analysis for video ${metadata.videoId}:`, {
@@ -290,7 +240,7 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
       response.metadata = {
         duration: metadata.duration,
         thumbnailUrl: metadata.thumbnailUrl,
-        gcsPath,
+        gcsPath: '',
       };
     }
 

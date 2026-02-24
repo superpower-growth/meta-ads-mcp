@@ -85,7 +85,7 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
       'asset_feed_spec' // For dynamic creative videos
     ]);
 
-    // Extract video ID from multiple possible locations
+    // Extract video ID and page ID from creative
     let videoId = (creativeData as any).video_id || // Direct field
                   (creativeData as any).object_story_spec?.video_data?.video_id ||
                   (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id;
@@ -95,9 +95,33 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
       return null;
     }
 
-    // Query video node using direct API call (NOT AdVideo class)
-    // AdVideo class is for uploads only, use direct API call for retrieval
-    const videoResponse = await FacebookAdsApi.init(env.META_ACCESS_TOKEN).call(
+    const pageId = (creativeData as any).object_story_spec?.page_id;
+
+    // Get page access token if page ID is available (required for video source URL)
+    let videoAccessToken = env.META_ACCESS_TOKEN;
+    if (pageId) {
+      try {
+        const api = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
+        const pagesResponse = await api.call('GET', ['me', 'accounts'], {
+          fields: 'id,access_token',
+        }) as any;
+        const pages = pagesResponse?.data || pagesResponse || [];
+        const page = (Array.isArray(pages) ? pages : []).find(
+          (p: any) => String(p.id) === String(pageId)
+        );
+        if (page?.access_token) {
+          videoAccessToken = page.access_token;
+          console.log(`Using page token for page ${pageId} to fetch video source`);
+        } else {
+          console.warn(`Page ${pageId} not found in /me/accounts — falling back to user token`);
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch page token for page ${pageId}, falling back to user token:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // Query video node using page token (or user token as fallback)
+    const videoResponse = await FacebookAdsApi.init(videoAccessToken).call(
       'GET',
       [videoId],
       {

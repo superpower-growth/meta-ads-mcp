@@ -415,5 +415,87 @@ export async function analyzeVideoWithCostGuard(
   return analyzeVideo(gcsPath);
 }
 
+/**
+ * Analyze a video directly from a URL (no GCS download needed)
+ *
+ * Passes the video URL to Gemini via fileData.fileUri so Gemini fetches it directly.
+ * Uses the same retry logic, concurrency limits, cost guard, and parsing as the GCS path.
+ *
+ * @param videoUrl - Direct URL to the video file (e.g. Meta CDN source URL)
+ * @param videoDurationSeconds - Duration of the video in seconds (for cost estimation)
+ * @returns Structured analysis of video content
+ * @throws Error if Gemini not enabled, cost exceeds max, or analysis fails
+ */
+export async function analyzeVideoFromUrl(
+  videoUrl: string,
+  videoDurationSeconds: number
+): Promise<VideoAnalysis> {
+  if (!isGeminiEnabled()) {
+    throw new Error('Gemini client not initialized. Check GEMINI_API_KEY or Vertex AI setup.');
+  }
+
+  const estimatedCost = estimateAnalysisCost(videoDurationSeconds);
+  if (estimatedCost > env.GEMINI_MAX_COST_PER_ANALYSIS) {
+    throw new Error(
+      `Estimated analysis cost ($${estimatedCost.toFixed(4)}) exceeds maximum ($${env.GEMINI_MAX_COST_PER_ANALYSIS}). ` +
+      `Video duration: ${videoDurationSeconds}s. Consider adjusting GEMINI_MAX_COST_PER_ANALYSIS.`
+    );
+  }
+
+  console.log(`Estimated analysis cost: $${estimatedCost.toFixed(4)} for ${videoDurationSeconds}s video (model: ${geminiConfig.model})`);
+
+  try {
+    return await analysisLimit(() => retryWithBackoff(
+      async () => {
+        console.log(`Starting video analysis from URL (${videoDurationSeconds}s video)`);
+
+        const response = await geminiClient!.models.generateContent({
+          model: geminiConfig.model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  fileData: {
+                    fileUri: videoUrl,
+                    mimeType: 'video/mp4',
+                  },
+                },
+                { text: ANALYSIS_PROMPT },
+              ],
+            },
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: geminiAnalysisSchema,
+          },
+        });
+
+        const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!responseText) {
+          throw new Error('No response text from Gemini API');
+        }
+
+        console.log(`Received analysis response (${responseText.length} chars)`);
+        const parsed = parseJsonResponse(responseText);
+        const validated = VideoAnalysisSchema.parse(parsed);
+        console.log(`Analysis completed: ${validated.scenes.length} scenes, ${validated.textOverlays.length} text overlays`);
+        return validated;
+      },
+      { maxRetries: 3, baseDelayMs: 2000 },
+    ));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('429') || errorMessage.includes('quota')) {
+      console.error(`Rate limit hit for URL analysis. Consider upgrading tier or reducing request rate.`);
+    } else if (errorMessage.includes('auth') || errorMessage.includes('permission')) {
+      console.error(`Authentication failed for URL analysis. Check GEMINI_API_KEY or service account permissions.`);
+    } else {
+      console.error(`URL analysis failed: ${errorMessage}`);
+    }
+    throw error;
+  }
+}
+
 // Export schema for external use
 export { VideoAnalysisSchema };
