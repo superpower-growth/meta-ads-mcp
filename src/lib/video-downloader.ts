@@ -8,8 +8,8 @@
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import { pipeline } from 'stream/promises';
-import { Ad, AdCreative } from 'facebook-nodejs-business-sdk';
-import { api } from '../meta/client.js';
+import { Ad, AdCreative, FacebookAdsApi } from 'facebook-nodejs-business-sdk';
+import { env } from '../config/env.js';
 import { uploadVideo } from './gcs-storage.js';
 import { isGcpEnabled } from './gcp-clients.js';
 
@@ -94,8 +94,9 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
 
     // Query video node using direct API call (NOT AdVideo class)
     // AdVideo class is for uploads only, use direct API call for retrieval
-    // Try multiple fields to handle archived/killed ads
-    const videoResponse = await api.call(
+    // Re-initialize API to ensure token is available (ES module initialization issue)
+    const freshApi = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
+    const videoResponse = await freshApi.call(
       'GET',
       `/${videoId}`,
       {
