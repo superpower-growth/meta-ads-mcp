@@ -117,6 +117,9 @@ export class MetricsService {
    */
   constructor(accountId: string) {
     this.accountId = accountId;
+    // Ensure the default API instance is set. TypeScript may tree-shake the
+    // side-effect-only import of client.js, so we re-init explicitly here.
+    FacebookAdsApi.init(env.META_ACCESS_TOKEN);
   }
 
   /**
@@ -166,8 +169,6 @@ export class MetricsService {
     params: InsightParams
   ): Promise<InsightObject[]> {
     try {
-      // Re-initialize API to ensure it's available (ES module issue)
-      FacebookAdsApi.init(env.META_ACCESS_TOKEN);
       const account = new AdAccount(this.accountId);
       const response = await account.getInsights(fields, params);
 

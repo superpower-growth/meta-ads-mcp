@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod';
-import { AdAccount } from 'facebook-nodejs-business-sdk';
-import { api } from '../meta/client.js';
+import { AdAccount, FacebookAdsApi } from 'facebook-nodejs-business-sdk';
+import { env } from '../config/env.js';
 import { createToolSchema } from '../lib/validation.js';
 
 /**
@@ -35,7 +35,8 @@ export async function getAccountInfo(input: GetAccountInput): Promise<string> {
     : `act_${accountId}`;
 
   try {
-    // Create AdAccount instance and fetch details
+    // Ensure API is initialized (TypeScript may tree-shake side-effect imports)
+    FacebookAdsApi.init(env.META_ACCESS_TOKEN);
     const account = new AdAccount(normalizedAccountId);
     const fields = ['name', 'account_id', 'currency', 'account_status'];
 

@@ -108,6 +108,8 @@ export async function getAdCreativeText(args: unknown): Promise<string> {
   const input = GetAdCreativeTextSchema.parse(args);
 
   try {
+    // Ensure API is initialized (TypeScript may tree-shake side-effect imports)
+    bizSdk.FacebookAdsApi.init(env.META_ACCESS_TOKEN);
     const account = new AdAccount(env.META_AD_ACCOUNT_ID);
     let ads: any[] = [];
 
