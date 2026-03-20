@@ -572,20 +572,13 @@ export class AdCreatorService {
   async createPlacementMappedCreative(params: CreatePlacementMappedCreativeParams): Promise<AdCreativeResult> {
     try {
       this.initApi();
-      const account = new AdAccount(this.accountId);
 
-      const feedVideo = params.videos.find((v) => v.ratio === '4:5');
+      // Always use 9:16 as primary — Meta handles Feed adaptation via video_auto_crop.
+      // This matches the proven pattern: every working ad in the account uses 9:16 only.
       const reelsVideo = params.videos.find((v) => v.ratio === '9:16');
-
-      // If we have both formats, use asset_feed_spec with asset_customization_rules
-      // to serve native 4:5 on Feed and native 9:16 on Stories/Reels.
-      // If only one format, fall back to single-video creative with auto_crop.
-      if (feedVideo && reelsVideo) {
-        return this.createAssetFeedCreative(params, feedVideo, reelsVideo);
-      }
-
-      // Fallback: single video with auto_crop
+      const feedVideo = params.videos.find((v) => v.ratio === '4:5');
       const primaryVideo = reelsVideo || feedVideo!;
+
       return this.createSingleVideoCreative(params, primaryVideo);
     } catch (error: any) {
       const errorMessage = this.formatMetaError(error);
@@ -594,101 +587,7 @@ export class AdCreatorService {
   }
 
   /**
-   * Create a creative using asset_feed_spec with asset_customization_rules
-   * for true per-placement video (4:5 Feed, 9:16 Reels/Stories).
-   */
-  private async createAssetFeedCreative(
-    params: CreatePlacementMappedCreativeParams,
-    feedVideo: { videoId: string; thumbnailUrl?: string; ratio: string },
-    reelsVideo: { videoId: string; thumbnailUrl?: string; ratio: string }
-  ): Promise<AdCreativeResult> {
-    const account = new AdAccount(this.accountId);
-
-    const assetFeedSpec: Record<string, any> = {
-      ad_formats: ['SINGLE_VIDEO'],
-      optimization_type: 'PLACEMENT',
-      videos: [
-        { video_id: feedVideo.videoId, adlabels: [{ name: 'feed' }] },
-        { video_id: reelsVideo.videoId, adlabels: [{ name: 'reels' }] },
-      ],
-      bodies: [{ text: params.primaryText, adlabels: [{ name: 'default' }] }],
-      titles: [{ text: params.headline, adlabels: [{ name: 'default' }] }],
-      descriptions: [{ text: params.description || params.headline, adlabels: [{ name: 'default' }] }],
-      link_urls: [{ website_url: params.linkUrl, adlabels: [{ name: 'default' }] }],
-      call_to_action_types: [params.callToAction || 'LEARN_MORE'],
-      asset_customization_rules: [
-        {
-          customization_spec: {
-            publisher_platforms: ['facebook', 'instagram'],
-            facebook_positions: ['feed'],
-            instagram_positions: ['stream'],
-          },
-          video_label: { name: 'feed' },
-          body_label: { name: 'default' },
-          title_label: { name: 'default' },
-          description_label: { name: 'default' },
-          link_url_label: { name: 'default' },
-        },
-        {
-          customization_spec: {
-            publisher_platforms: ['facebook', 'instagram'],
-            facebook_positions: ['story', 'facebook_reels'],
-            instagram_positions: ['story', 'reels'],
-          },
-          video_label: { name: 'reels' },
-          body_label: { name: 'default' },
-          title_label: { name: 'default' },
-          description_label: { name: 'default' },
-          link_url_label: { name: 'default' },
-        },
-        {
-          // Default catch-all rule (required by Meta — must have empty customization_spec)
-          customization_spec: {},
-          video_label: { name: 'feed' },
-          body_label: { name: 'default' },
-          title_label: { name: 'default' },
-          description_label: { name: 'default' },
-          link_url_label: { name: 'default' },
-          is_default: true,
-        },
-      ],
-    };
-
-    // Add thumbnail images if available
-    if (feedVideo.thumbnailUrl) {
-      assetFeedSpec.videos[0].image_url = feedVideo.thumbnailUrl;
-    }
-    if (reelsVideo.thumbnailUrl) {
-      assetFeedSpec.videos[1].image_url = reelsVideo.thumbnailUrl;
-    }
-
-    const creativeParams: Record<string, any> = {
-      name: params.name,
-      asset_feed_spec: assetFeedSpec,
-      object_story_spec: {
-        page_id: params.pageId,
-      },
-    };
-
-    if (params.instagramUserId) {
-      creativeParams.instagram_user_id = params.instagramUserId;
-    }
-
-    const allVideoIds = params.videos.map((v) => v.videoId).join(',');
-    console.log(`[AdCreatorService] Creating asset_feed_spec creative (4:5 feed + 9:16 reels) with params:`, JSON.stringify(creativeParams, null, 2));
-    const result = await account.createAdCreative([], creativeParams);
-
-    console.log(`[AdCreatorService] Created asset_feed_spec creative: ${result.id} (feed: ${feedVideo.videoId}, reels: ${reelsVideo.videoId})`);
-    return {
-      creativeId: result.id,
-      name: params.name,
-      videoId: allVideoIds,
-      pageId: params.pageId,
-    };
-  }
-
-  /**
-   * Fallback: single-video creative with video_auto_crop for cross-placement.
+   * Single-video creative with video_auto_crop + standard_enhancements for cross-placement.
    */
   private async createSingleVideoCreative(
     params: CreatePlacementMappedCreativeParams,
@@ -722,6 +621,7 @@ export class AdCreatorService {
       object_story_spec: objectStorySpec,
       degrees_of_freedom_spec: {
         creative_features_spec: {
+          standard_enhancements: { enroll_status: 'OPT_IN' },
           video_auto_crop: { enroll_status: 'OPT_IN' },
         },
       },

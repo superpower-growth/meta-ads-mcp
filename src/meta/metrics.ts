@@ -89,6 +89,7 @@ export interface InsightObject {
   video_p100_watched_actions?: Array<{ action_type: string; value: string }>;
   video_play_actions?: Array<{ action_type: string; value: string }>;
   video_thruplay_watched_actions?: Array<{ action_type: string; value: string }>;
+  created_time?: string;
   [key: string]: any;
 }
 
@@ -242,6 +243,11 @@ export class MetricsService {
     const allInsights: InsightObject[] = [];
     let pageNumber = 1;
 
+    // Use larger page size to reduce pagination rounds (default 25 is too small)
+    if (!params.limit) {
+      params.limit = 500;
+    }
+
     try {
       const account = new AdAccount(this.accountId);
       let response = await account.getInsights(fields, params);
@@ -255,24 +261,44 @@ export class MetricsService {
       while (response.paging && response.paging.next) {
         pageNumber++;
 
-        try {
-          // Fetch next page using cursor
-          response = await response.next();
+        // Retry logic for transient errors (rate limiting, service unavailable)
+        let retries = 0;
+        const maxRetries = 3;
+        let success = false;
 
-          for (const insight of response) {
-            allInsights.push(insight as InsightObject);
-          }
+        while (!success && retries < maxRetries) {
+          try {
+            // Fetch next page using cursor
+            response = await response.next();
 
-          // Log warning if dataset is very large
-          if (allInsights.length > 1000 && allInsights.length % 1000 === 0) {
-            console.warn(
-              `[MetricsService] Large dataset detected: ${allInsights.length} records fetched so far`
-            );
+            for (const insight of response) {
+              allInsights.push(insight as InsightObject);
+            }
+            success = true;
+          } catch (error: any) {
+            const errorMessage = this.formatMetaError(error);
+            const isRetryable = errorMessage.includes('temporarily unavailable')
+              || errorMessage.includes('rate limit')
+              || errorMessage.includes('Too many calls')
+              || errorMessage.includes('Please reduce')
+              || (error.code === 2 || error.code === 4 || error.code === 17 || error.code === 32);
+
+            if (isRetryable && retries < maxRetries - 1) {
+              retries++;
+              const delay = Math.min(1000 * Math.pow(2, retries), 10000); // 2s, 4s, 8s (capped at 10s)
+              console.warn(`[MetricsService] Retryable error on page ${pageNumber}, retry ${retries}/${maxRetries} after ${delay}ms: ${errorMessage}`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+              throw new Error(`Meta Insights API error on page ${pageNumber}: ${errorMessage}`);
+            }
           }
-        } catch (error: any) {
-          // If any page fails, throw error with page number context
-          const errorMessage = this.formatMetaError(error);
-          throw new Error(`Meta Insights API error on page ${pageNumber}: ${errorMessage}`);
+        }
+
+        // Log warning if dataset is very large
+        if (allInsights.length > 1000 && allInsights.length % 1000 === 0) {
+          console.warn(
+            `[MetricsService] Large dataset detected: ${allInsights.length} records fetched so far`
+          );
         }
       }
 

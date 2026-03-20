@@ -203,9 +203,7 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
     const video4x5 = videoFiles.find((f) => f.aspectRatio === '4:5');
     const video9x16 = videoFiles.find((f) => f.aspectRatio === '9:16');
 
-    // Use 4:5 as primary; fall back to 9:16 if no 4:5 exists
-    const primaryVideo = video4x5 || video9x16!;
-    if (!primaryVideo) {
+    if (!video4x5 && !video9x16) {
       throw new Error(
         `No video with recognized aspect ratio found. Available: ${videoFiles.map((f) => `${f.name} (${f.aspectRatio || 'unknown'})`).join(', ')}`
       );
@@ -217,38 +215,43 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
         (video9x16 ? `, 9:16: "${video9x16.name}"` : ', no 9:16')
     );
 
-    // Step 2: Stage primary video to GCS + Gemini analysis
-    const primaryRatio = video4x5 ? '4x5' : '9x16';
-    const jobKeyPrimary = `${id}_${primaryRatio}`;
-    const gcsPath4x5 = await stageDriveVideoToGcs(primaryVideo, jobKeyPrimary);
+    // Step 2: Stage videos to GCS for Gemini analysis
+    // Use 4:5 for Gemini (better framing for analysis), fall back to 9:16
+    const geminiVideo = video4x5 || video9x16!;
+    const geminiJobKey = `${id}_${video4x5 ? '4x5' : '9x16'}`;
+    const gcsPathGemini = await stageDriveVideoToGcs(geminiVideo, geminiJobKey);
 
     // Check Gemini cache, run analysis if not cached
     let videoAnalysis: VideoAnalysis;
-    const cacheKey = sanitizeFirestoreKey(gcsPath4x5);
+    const cacheKey = sanitizeFirestoreKey(gcsPathGemini);
     const cached = await getCached(cacheKey);
     if (cached) {
-      console.log(`[ad-shipper] Gemini cache hit for primary video`);
+      console.log(`[ad-shipper] Gemini cache hit for analysis video`);
       videoAnalysis = cached.analysisResults as VideoAnalysis;
     } else {
-      console.log(`[ad-shipper] Running Gemini analysis on primary video...`);
-      videoAnalysis = await analyzeVideo(gcsPath4x5);
+      console.log(`[ad-shipper] Running Gemini analysis on video...`);
+      videoAnalysis = await analyzeVideo(gcsPathGemini);
       await setCached({
         videoId: cacheKey,
         adId: id,
         analysisResults: videoAnalysis,
-        gcsPath: gcsPath4x5,
+        gcsPath: gcsPathGemini,
       });
     }
 
-    // Step 3: Stage 9:16 to GCS (if exists and not already staged as primary)
-    let gcsPath9x16: string | undefined;
+    // Step 3: Stage 9:16 to GCS if not already staged (for Meta upload)
+    let gcsPath9x16: string;
     if (video9x16 && video4x5) {
-      // Only stage 9:16 separately if 4:5 was the primary (otherwise 9:16 is already staged)
+      // 4:5 was used for Gemini, stage 9:16 separately for Meta upload
       const jobKey9x16 = `${id}_9x16`;
       gcsPath9x16 = await stageDriveVideoToGcs(video9x16, jobKey9x16);
-    } else if (video9x16 && !video4x5) {
-      // 9:16 was already staged as primary
-      gcsPath9x16 = gcsPath4x5;
+    } else if (video9x16) {
+      // 9:16 was already staged as Gemini video
+      gcsPath9x16 = gcsPathGemini;
+    } else {
+      // No 9:16 — use 4:5 as fallback for Meta upload
+      console.log(`[ad-shipper] No 9:16 video, using 4:5 as fallback for Meta upload`);
+      gcsPath9x16 = gcsPathGemini;
     }
 
     // Step 4: Generate copy
@@ -295,90 +298,36 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
       service, input.campaignId, input.adSetName, adSetCache
     );
 
-    // Step 7: Generate signed URLs and upload to Meta
+    // Step 7: Upload only 9:16 video to Meta (Meta handles Feed via video_auto_crop)
     const pageId = env.DEFAULT_PAGE_ID;
     if (!pageId) throw new Error('DEFAULT_PAGE_ID not configured');
     const instagramUserId = env.DEFAULT_INSTAGRAM_ACTOR_ID;
 
-    const videoIds: string[] = [];
+    const signedUrl = await getSignedUrl(gcsPath9x16);
+    const videoRatio = video9x16 ? '9:16' : '4:5';
+    const upload = await service.uploadVideo(signedUrl, `${deliverableName} - ${videoRatio}`);
 
-    // Upload 4:5 (and 9:16 if available) to Meta in parallel
-    const uploadPromises: Promise<{ videoId: string; ratio: string; thumbnailUrl?: string }>[] = [];
+    // Step 8: Create creative with video_auto_crop and ad
+    const creative = await service.createPlacementMappedCreative({
+      name: `${deliverableName} Creative`,
+      pageId,
+      instagramUserId,
+      videos: [{ videoId: upload.videoId, thumbnailUrl: upload.thumbnailUrl, ratio: videoRatio }],
+      primaryText: primaryTextWithUrl,
+      headline: copyResult.headline,
+      description: copyResult.description,
+      callToAction: 'LEARN_MORE',
+      linkUrl: linkUrlWithUtm,
+    });
 
-    uploadPromises.push(
-      getSignedUrl(gcsPath4x5).then(async (url) => {
-        const result = await service.uploadVideo(url, `${deliverableName} - 4:5`);
-        return { videoId: result.videoId, ratio: '4:5', thumbnailUrl: result.thumbnailUrl };
-      })
-    );
+    const ad = await service.createAd({
+      adset_id: adSetId,
+      creative_id: creative.creativeId,
+      name: deliverableName,
+      status: 'PAUSED',
+    });
 
-    if (gcsPath9x16) {
-      uploadPromises.push(
-        getSignedUrl(gcsPath9x16).then(async (url) => {
-          const result = await service.uploadVideo(url, `${deliverableName} - 9:16`);
-          return { videoId: result.videoId, ratio: '9:16', thumbnailUrl: result.thumbnailUrl };
-        })
-      );
-    }
-
-    const uploads = await Promise.all(uploadPromises);
-    for (const u of uploads) {
-      videoIds.push(u.videoId);
-    }
-
-    // Step 8: Create creative and ad
-    const creativeIds: string[] = [];
-    const adIds: string[] = [];
-
-    if (uploads.length > 1) {
-      // Multiple formats — use 9:16 as primary (native for Stories/Reels) with video_auto_crop for Feed
-      const creative = await service.createPlacementMappedCreative({
-        name: `${deliverableName} Creative`,
-        pageId,
-        instagramUserId,
-        videos: uploads.map((u) => ({ videoId: u.videoId, thumbnailUrl: u.thumbnailUrl, ratio: u.ratio })),
-        primaryText: primaryTextWithUrl,
-        headline: copyResult.headline,
-        description: copyResult.description,
-        callToAction: 'LEARN_MORE',
-        linkUrl: linkUrlWithUtm,
-      });
-      creativeIds.push(creative.creativeId);
-
-      const ad = await service.createAd({
-        adset_id: adSetId,
-        creative_id: creative.creativeId,
-        name: deliverableName,
-        status: 'PAUSED',
-      });
-      adIds.push(ad.adId);
-    } else {
-      // Single format — use standard creative
-      const upload = uploads[0];
-      const creative = await service.createAdCreative({
-        name: `${deliverableName} Creative`,
-        pageId,
-        instagramUserId,
-        videoId: upload.videoId,
-        primaryText: primaryTextWithUrl,
-        headline: copyResult.headline,
-        description: copyResult.description,
-        callToAction: 'LEARN_MORE',
-        linkUrl: linkUrlWithUtm,
-        thumbnailUrl: upload.thumbnailUrl,
-      });
-      creativeIds.push(creative.creativeId);
-
-      const ad = await service.createAd({
-        adset_id: adSetId,
-        creative_id: creative.creativeId,
-        name: deliverableName,
-        status: 'PAUSED',
-      });
-      adIds.push(ad.adId);
-    }
-
-    console.log(`[ad-shipper] Shipped "${deliverableName}": ${adIds.length} ad(s), ${uploads.length} video format(s)`);
+    console.log(`[ad-shipper] Shipped "${deliverableName}": 1 ad, ${videoRatio} video + auto_crop`);
 
     return {
       id,
@@ -386,9 +335,9 @@ export async function shipOneRow(input: ShipAdRowInput, adSetCache: AdSetCache):
       status: 'shipped',
       primaryText: primaryTextWithUrl,
       headline: copyResult.headline,
-      adIds,
-      creativeIds,
-      videoIds,
+      adIds: [ad.adId],
+      creativeIds: [creative.creativeId],
+      videoIds: [upload.videoId],
       adSetId,
       adSetCreated,
       durationMs: Date.now() - start,

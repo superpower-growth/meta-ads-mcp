@@ -11,14 +11,15 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 - **Facebook OAuth Authentication**: Secure login with Facebook for multi-user access
 - **Remote HTTP Access**: StreamableHTTP transport for remote MCP connections
 - **Session Management**: 24-hour sessions with automatic expiry
-- **10 Analytics Tools**: Comprehensive ad performance analytics
-  - Account information
-  - Campaign, Ad Set, and Ad performance metrics
-  - **Custom conversion tracking** (subscription_created, registration_started, etc.)
-  - **Ad creative text analysis** for content categorization
-  - Video performance and engagement tracking
-  - Demographic insights
+- **22 MCP Tools**: Comprehensive ad performance analytics
+  - Unified performance queries at campaign/adset/ad level with ad relevance diagnostics
+  - Video completion funnel, engagement depth, retention scoring
+  - Demographics segmented by age, gender, country, device, platform, placement
+  - Creative fatigue detection and creative-level performance aggregation
+  - Custom conversion tracking (subscription_created, registration_started, etc.)
+  - Ad creative text analysis for content categorization
   - Time period and entity comparisons
+  - Full ad creation pipeline (campaign → ad set → creative → ad)
 - **Docker Support**: Containerized deployment with health checks
 - **Production Ready**: Environment-based configuration, security best practices
 
@@ -342,26 +343,47 @@ When your session expires (after 24 hours), you'll need to:
 2. Extract the new `connect.sid` cookie
 3. Update your `~/.config/claude-code/mcp.json` with the new cookie value
 
-## Available Tools
+## Available Tools (22)
 
 All tools are accessible via Claude Code once authenticated:
 
+### Performance Analytics
 1. **get-account** - Retrieve Meta Ad Account information
-2. **get-campaign-performance** - Campaign-level metrics and performance
-3. **get-adset-performance** - Ad Set-level performance data
-4. **get-ad-performance** - Individual ad performance metrics
-   - ✨ **Enhanced**: Custom conversion support (subscription_created, etc.)
-   - ✨ **Enhanced**: Custom date ranges for all-time analysis
-   - ✨ **Enhanced**: Cost-per-action calculations for custom events
-5. **get-ad-creative-text** - Retrieve ad creative text for content analysis
-   - Extract primary text, headline, and description
-   - Supports both link_data and video_data structures
-   - Enable keyword-based ad categorization
-6. **get-video-performance** - Video-specific performance metrics
-7. **get-video-demographics** - Audience demographic breakdowns
-8. **get-video-engagement** - Video engagement metrics (watch time, completion)
-9. **compare-time-periods** - Compare performance across time periods
-10. **compare-entities** - Compare multiple campaigns/adsets/ads
+2. **get-performance** - Unified performance metrics at any level (campaign/adset/ad)
+   - Custom conversions (subscription_created, etc.)
+   - Custom date ranges for all-time analysis
+   - Ad relevance diagnostics (quality/engagement/conversion rankings)
+   - Optional AI video creative analysis (cached)
+3. **get-video-metrics** - Video completion funnel, engagement depth (2s/15s/30s views), retention scores, weak point detection
+4. **get-demographics** - Performance metrics segmented by breakdowns (age, gender, country, device, platform, placement)
+   - Three modes: `standard` (all ads), `video` (completion funnel), `conversions` (placement ROAS)
+5. **get-creative-fatigue** - Detect ad creative fatigue via daily frequency/CTR trend analysis
+   - Fatigue score (0-100), frequency/CTR trends, recommendation (healthy/monitor/rotate/critical)
+6. **get-creative-performance** - Aggregate performance by creative ID across all ads using the same creative
+
+### Creative Analysis
+7. **get-ad-creative-text** - Extract ad creative text (primary, headline, description) for content analysis
+8. **analyze-video-creative** - AI-powered video analysis (scenes, text overlays, emotional tone, creative approach)
+9. **analyze-video-url** - Analyze video from URL
+10. **analyze-image-url** - Analyze image from URL
+
+### Comparison Tools
+11. **compare-time-periods** - Compare performance across time periods
+12. **compare-entities** - Compare multiple campaigns/adsets/ads
+
+### Account & Setup
+13. **get-saved-audiences** - List saved audiences
+14. **get-facebook-pages** - List Facebook pages
+15. **list-ad-sets** - List ad sets
+
+### Ad Creation Pipeline
+16. **create-campaign** - Create a new campaign
+17. **create-ad-set** - Create a new ad set
+18. **upload-ad-video** - Upload video creative
+19. **create-ad-creative** - Create ad creative
+20. **create-ad** - Create an ad
+21. **ship-ads-batch** - Batch ship ads
+22. **sync-campaigns-to-notion** - Sync campaign data to Notion
 
 ### Ad Classification Library
 
@@ -393,7 +415,7 @@ export const CUSTOM_CONVERSION_MAP: Record<string, string> = {
 
 Then use friendly names in your queries:
 ```
-get-ad-performance with customActions=["subscription_created"]
+get-performance with level="ad", customActions=["subscription_created"]
 ```
 
 ## Environment Variables
@@ -578,17 +600,26 @@ For issues or questions:
   - ✅ Phase 17: Performance Correlation (creative insights)
   - ✅ Phase 18: Testing & Documentation
 
+- ✅ **v1.2 Tool Consolidation + Creative Analysis** (COMPLETE)
+  - ✅ Consolidated 8 performance tools into 3 unified tools (25 → 22 tools, net +3 new capabilities)
+  - ✅ `get-performance`: replaces get-campaign/adset/ad-performance with unified `level` param
+  - ✅ `get-video-metrics`: replaces get-video-performance + get-video-engagement
+  - ✅ `get-demographics`: replaces get-video-demographics + get-ad-demographics + get-placement-conversions
+  - ✅ New: Ad Relevance Diagnostics (quality/engagement/conversion rankings)
+  - ✅ New: `get-creative-fatigue` — daily frequency/CTR trend analysis with fatigue scoring
+  - ✅ New: `get-creative-performance` — aggregate metrics by creative ID across ads
+  - ✅ Server-side filtering for entity queries (eliminates rate limiting on filtered queries)
+  - ✅ Retry with exponential backoff for transient Meta API errors
+  - ✅ 20x page size increase (25 → 500) to reduce API pagination rounds
+
 ### Future Enhancements
 
+- [ ] Ad Library API (competitor intelligence) — blocked on Meta App Review for `ads_library_access`
 - [ ] Budget management tools (write operations)
 - [ ] Audit trail logging
 - [ ] Anomaly detection in metrics
 - [ ] Query result caching for performance data
-- [ ] Redis session store for scalability
-- [ ] CLI tool for automatic cookie extraction
-- [ ] Browser extension for easier setup
 
 ---
 
 **Built with the Model Context Protocol SDK**
-# Force fresh build

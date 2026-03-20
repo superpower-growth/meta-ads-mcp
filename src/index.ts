@@ -32,18 +32,16 @@ import { isGoogleOAuthConfigured, getDriveAccessToken } from './auth/google-oaut
 import { ServerReadiness } from './lib/server-readiness.js';
 import { tools } from './tools/index.js';
 import { getAccountInfo } from './tools/get-account.js';
-import { getCampaignPerformance } from './tools/get-campaign-performance.js';
-import { getAdsetPerformance } from './tools/get-adset-performance.js';
-import { getAdPerformance } from './tools/get-ad-performance.js';
-import { getVideoPerformance } from './tools/get-video-performance.js';
-import { getVideoDemographics } from './tools/get-video-demographics.js';
-import { getVideoEngagement } from './tools/get-video-engagement.js';
+import { getPerformance } from './tools/get-performance.js';
+import { getVideoMetrics } from './tools/get-video-metrics.js';
+import { getDemographics } from './tools/get-demographics.js';
+import { getCreativeFatigue } from './tools/get-creative-fatigue.js';
+import { getCreativePerformance } from './tools/get-creative-performance.js';
 import { compareTimePeriods } from './tools/compare-time-periods.js';
 import { compareEntities } from './tools/compare-entities.js';
 import { getAdCreativeText } from './tools/get-ad-creative-text.js';
 import { analyzeVideoCreative } from './tools/analyze-video-creative.js';
 import { batchAnalyzeVideoCreative } from './tools/batch-analyze-video-creative.js';
-import { getPlacementConversions } from './tools/get-placement-conversions.js';
 import { getSavedAudiences } from './tools/get-saved-audiences.js';
 import { getFacebookPages } from './tools/get-facebook-pages.js';
 import { listAdSets } from './tools/list-ad-sets.js';
@@ -103,70 +101,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
-      case 'get-campaign-performance': {
-        const result = await getCampaignPerformance(args as any);
+      case 'get-performance': {
+        const result = await getPerformance(args as any);
         return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
+          content: [{ type: 'text', text: result }],
         };
       }
-      case 'get-adset-performance': {
-        const result = await getAdsetPerformance(args as any);
+      case 'get-video-metrics': {
+        const result = await getVideoMetrics(args as any);
         return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
+          content: [{ type: 'text', text: result }],
         };
       }
-      case 'get-ad-performance': {
-        const result = await getAdPerformance(args as any);
+      case 'get-demographics': {
+        const result = await getDemographics(args as any);
         return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
+          content: [{ type: 'text', text: result }],
         };
       }
-      case 'get-video-performance': {
-        const result = await getVideoPerformance(args as any);
+      case 'get-creative-fatigue': {
+        const result = await getCreativeFatigue(args as any);
         return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
+          content: [{ type: 'text', text: result }],
         };
       }
-      case 'get-video-demographics': {
-        const result = await getVideoDemographics(args as any);
+      case 'get-creative-performance': {
+        const result = await getCreativePerformance(args as any);
         return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
-        };
-      }
-      case 'get-video-engagement': {
-        const result = await getVideoEngagement(args as any);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
+          content: [{ type: 'text', text: result }],
         };
       }
       case 'compare-time-periods': {
@@ -217,17 +179,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const result = await batchAnalyzeVideoCreative(args as any);
         return {
           content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'get-placement-conversions': {
-        const result = await getPlacementConversions(args as any);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: result,
-            },
-          ],
         };
       }
       case 'get-saved-audiences': {
