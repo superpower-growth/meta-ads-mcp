@@ -54,8 +54,27 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Exchange code for user profile
     const user = await handleOAuthCallback(code);
 
-    // OAuth Authorization Code flow
-    const authRequest = req.session.authRequest;
+    // Decode auth request from Facebook state param (multi-machine safe)
+    const fbState = req.query.state as string || '';
+    let authRequest: {
+      clientId: string;
+      redirectUri: string;
+      state?: string;
+      codeChallenge?: string;
+      codeChallengeMethod?: string;
+    } | null = null;
+
+    if (fbState.startsWith('oauth:')) {
+      try {
+        const encoded = fbState.slice('oauth:'.length);
+        authRequest = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+      } catch {
+        // Fall back to session for backwards compatibility
+        authRequest = req.session.authRequest || null;
+      }
+    } else {
+      authRequest = req.session.authRequest || null;
+    }
 
     if (!authRequest) {
       return res.status(400).send(`
@@ -74,8 +93,8 @@ router.get('/callback', async (req: Request, res: Response) => {
     // Generate authorization code
     const authorizationCode = crypto.randomBytes(32).toString('hex');
 
-    // Store authorization code with user info
-    authorizationCodes.set(authorizationCode, {
+    // Store authorization code with user info (persists to Firestore for multi-machine)
+    await authorizationCodes.set(authorizationCode, {
       code: authorizationCode,
       clientId: authRequest.clientId,
       redirectUri: authRequest.redirectUri,

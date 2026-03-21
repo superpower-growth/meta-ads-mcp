@@ -15,7 +15,7 @@ import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { MetricsService } from '../meta/metrics.js';
 import { parseRoas, parseActions } from '../lib/parsers.js';
-import { resolveActionType } from '../lib/custom-conversions.js';
+import { resolveActionType, fetchCustomConversions } from '../lib/custom-conversions.js';
 import { env } from '../config/env.js';
 import bizSdk from 'facebook-nodejs-business-sdk';
 
@@ -128,6 +128,7 @@ export async function getCreativePerformance(args: unknown): Promise<string> {
     ];
 
     if (input.customActions && input.customActions.length > 0) {
+      try { await fetchCustomConversions(); } catch { /* fall back to hardcoded map */ }
       if (!fields.includes('actions')) fields.push('actions');
       if (!fields.includes('cost_per_action_type')) fields.push('cost_per_action_type');
     }

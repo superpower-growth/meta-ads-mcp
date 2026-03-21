@@ -12,7 +12,7 @@ import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { MetricsService, type InsightObject } from '../meta/metrics.js';
 import { parseActions, parseVideoMetrics } from '../lib/parsers.js';
-import { resolveActionType } from '../lib/custom-conversions.js';
+import { resolveActionType, fetchCustomConversions } from '../lib/custom-conversions.js';
 import { env } from '../config/env.js';
 
 /**
@@ -318,6 +318,9 @@ export async function getDemographics(args: unknown): Promise<string> {
         break;
 
       case 'conversions':
+        if (input.customActions && input.customActions.length > 0) {
+          try { await fetchCustomConversions(); } catch { /* fall back to hardcoded map */ }
+        }
         actionTypes = buildActionTypes(input);
         if (actionTypes.length === 0) {
           return 'No conversion metrics specified. Provide conversionMetrics or customActions.';

@@ -9,6 +9,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 import { generateAccessToken } from '../auth/device-flow.js';
+import { firestore, isGcpEnabled } from '../lib/gcp-clients.js';
 
 const router = Router();
 
@@ -67,7 +68,68 @@ interface AuthorizationCode {
   name?: string;
 }
 
-export const authorizationCodes = new Map<string, AuthorizationCode>();
+// In-memory fallback + Firestore for multi-machine consistency
+const authCodesMemory = new Map<string, AuthorizationCode>();
+const AUTH_CODES_COLLECTION = 'authorization_codes';
+
+export const authorizationCodes = {
+  async set(code: string, data: AuthorizationCode): Promise<void> {
+    authCodesMemory.set(code, data);
+    if (isGcpEnabled && firestore) {
+      try {
+        await firestore.collection(AUTH_CODES_COLLECTION).doc(code).set({
+          ...data,
+          expiresAt: data.expiresAt,
+        });
+      } catch (err) {
+        console.error('[AuthCodes] Failed to persist to Firestore:', err);
+      }
+    }
+  },
+
+  async get(code: string): Promise<AuthorizationCode | undefined> {
+    // Check memory first
+    const memResult = authCodesMemory.get(code);
+    if (memResult) return memResult;
+
+    // Fall back to Firestore
+    if (isGcpEnabled && firestore) {
+      try {
+        const doc = await firestore.collection(AUTH_CODES_COLLECTION).doc(code).get();
+        if (doc.exists) {
+          const data = doc.data()!;
+          const authCode: AuthorizationCode = {
+            code: data.code,
+            clientId: data.clientId,
+            redirectUri: data.redirectUri,
+            codeChallenge: data.codeChallenge,
+            codeChallengeMethod: data.codeChallengeMethod,
+            expiresAt: data.expiresAt?.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt),
+            userId: data.userId,
+            email: data.email,
+            name: data.name,
+          };
+          authCodesMemory.set(code, authCode);
+          return authCode;
+        }
+      } catch (err) {
+        console.error('[AuthCodes] Failed to read from Firestore:', err);
+      }
+    }
+    return undefined;
+  },
+
+  async delete(code: string): Promise<void> {
+    authCodesMemory.delete(code);
+    if (isGcpEnabled && firestore) {
+      try {
+        await firestore.collection(AUTH_CODES_COLLECTION).doc(code).delete();
+      } catch (err) {
+        console.error('[AuthCodes] Failed to delete from Firestore:', err);
+      }
+    }
+  },
+};
 
 /**
  * GET /authorize
@@ -99,17 +161,18 @@ router.get('/authorize', (req: Request, res: Response) => {
     });
   }
 
-  // Store authorization request parameters in session
-  req.session.authRequest = {
+  // Encode auth request in Facebook state param (avoids session affinity issues with multiple machines)
+  const authRequest = {
     clientId: client_id as string,
     redirectUri: redirect_uri as string,
     state: state as string,
     codeChallenge: code_challenge as string,
     codeChallengeMethod: (code_challenge_method as string) || 'plain',
   };
+  const encodedAuthRequest = Buffer.from(JSON.stringify(authRequest)).toString('base64url');
 
   // Redirect to Facebook OAuth for user authentication
-  const fbState = `oauth:${state || ''}`;
+  const fbState = `oauth:${encodedAuthRequest}`;
   res.redirect(`/auth/facebook?state=${encodeURIComponent(fbState)}`);
 });
 
@@ -137,8 +200,8 @@ router.post('/token', async (req: Request, res: Response) => {
     });
   }
 
-  // Retrieve authorization code
-  const authCode = authorizationCodes.get(code);
+  // Retrieve authorization code (async — checks Firestore if not in memory)
+  const authCode = await authorizationCodes.get(code);
 
   if (!authCode) {
     return res.status(400).json({
@@ -149,7 +212,7 @@ router.post('/token', async (req: Request, res: Response) => {
 
   // Validate authorization code
   if (authCode.expiresAt < new Date()) {
-    authorizationCodes.delete(code);
+    await authorizationCodes.delete(code);
     return res.status(400).json({
       error: 'invalid_grant',
       error_description: 'Authorization code has expired',

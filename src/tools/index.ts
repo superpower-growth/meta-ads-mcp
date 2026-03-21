@@ -30,6 +30,7 @@ import { createAdTool } from './create-ad.js';
 import { shipAdsBatchTool } from './ship-ads-batch.js';
 import { syncCampaignsToNotionTool } from './sync-campaigns-to-notion.js';
 import { analyzeAdThemesTool } from './analyze-ad-themes.js';
+import { listCustomConversionsTool } from './list-custom-conversions.js';
 
 /**
  * All available MCP tools (22 total)
@@ -68,4 +69,5 @@ export const tools: Tool[] = [
   shipAdsBatchTool,
   syncCampaignsToNotionTool,
   analyzeAdThemesTool,
+  listCustomConversionsTool,
 ];

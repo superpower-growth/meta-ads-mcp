@@ -12,7 +12,7 @@ import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { MetricsService } from '../meta/metrics.js';
 import { parseRoas, parseActions } from '../lib/parsers.js';
-import { resolveActionType } from '../lib/custom-conversions.js';
+import { resolveActionType, fetchCustomConversions } from '../lib/custom-conversions.js';
 import { env } from '../config/env.js';
 import { getVideoMetadata } from '../lib/video-downloader.js';
 import { getCached } from '../lib/firestore-cache.js';
@@ -81,6 +81,16 @@ const GetPerformanceSchema = z.object({
     .boolean()
     .default(false)
     .describe('Ad-level only. Include ad relevance diagnostics (quality_ranking, engagement_rate_ranking, conversion_rate_ranking)'),
+  sortBy: z
+    .string()
+    .optional()
+    .describe('Metric to sort results by (descending). Any standard metric (e.g. "spend", "impressions", "ctr") or custom action name. Defaults to "spend".'),
+  limit: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Max entities to return after sorting. Defaults to 50 for ad level, 200 for campaign/adset level.'),
 });
 
 type GetPerformanceInput = z.infer<typeof GetPerformanceSchema>;
@@ -177,6 +187,11 @@ export async function getPerformance(args: unknown): Promise<string> {
       if (!fields.includes('created_time')) fields.push('created_time');
     }
 
+    // Populate dynamic conversion map before resolving action types
+    if (input.customActions && input.customActions.length > 0) {
+      try { await fetchCustomConversions(); } catch { /* fall back to hardcoded map */ }
+    }
+
     // Custom actions fields
     if (input.customActions && input.customActions.length > 0) {
       if (!fields.includes('actions')) fields.push('actions');
@@ -270,24 +285,40 @@ export async function getPerformance(args: unknown): Promise<string> {
       return entity;
     });
 
+    // Sort and limit results
+    const totalCount = entities.length;
+    const sortMetric = input.sortBy || 'spend';
+    const effectiveLimit = input.limit ?? (input.level === 'ad' ? 50 : 200);
+
+    entities.sort((a, b) => {
+      const aVal = a.metrics[sortMetric] ?? 0;
+      const bVal = b.metrics[sortMetric] ?? 0;
+      return bVal - aVal;
+    });
+
+    const displayEntities = entities.slice(0, effectiveLimit);
+
     const response: any = {
       dateRange: dateLabel,
       level: input.level,
-      entities,
+      totalCount,
+      returnedCount: displayEntities.length,
+      sortedBy: sortMetric,
+      entities: displayEntities,
     };
 
     // Video analysis enrichment (ad-level only)
     if (input.includeVideoAnalysis && input.level === 'ad') {
       if (!isGeminiEnabled()) {
-        if (entities.length > 0) {
-          entities[0].videoCreative = {
+        if (displayEntities.length > 0) {
+          displayEntities[0].videoCreative = {
             videoId: null,
             analysis: null,
             message: 'Gemini AI not configured. Set GEMINI_API_KEY or configure Vertex AI.',
           };
         }
       } else {
-        for (const entity of entities) {
+        for (const entity of displayEntities) {
           try {
             const metadata = await getVideoMetadata(entity.id);
             if (!metadata) {
@@ -404,6 +435,14 @@ export const getPerformanceTool: Tool = {
         type: 'boolean' as const,
         description: 'Ad-level only. Include ad relevance diagnostics: quality_ranking, engagement_rate_ranking, conversion_rate_ranking (ABOVE_AVERAGE, AVERAGE, BELOW_AVERAGE_10/20/35)',
         default: false,
+      },
+      sortBy: {
+        type: 'string' as const,
+        description: 'Metric to sort results by (descending). Any standard metric (impressions, clicks, spend, ctr, cpc, cpm, purchase_roas, reach) or a custom action name. Defaults to "spend".',
+      },
+      limit: {
+        type: 'number' as const,
+        description: 'Max entities to return after sorting. Defaults to 50 for ad level, 200 for campaign/adset level.',
       },
     },
   },
