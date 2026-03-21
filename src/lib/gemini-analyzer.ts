@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { env } from '../config/env.js';
 import { storage } from './gcp-clients.js';
 import pLimit from 'p-limit';
+import axios from 'axios';
 
 // Semaphore: only 1 concurrent Gemini File API upload at a time to avoid OOM on 2GB Fly.io
 const uploadLimit = pLimit(1);
@@ -486,6 +487,14 @@ export async function analyzeVideoFromUrl(
     ));
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Fallback: if Gemini can't fetch the URL (auth-gated/geo-restricted CDN),
+    // download the video ourselves and upload via Gemini File API
+    if (errorMessage.includes('Cannot fetch content') || errorMessage.includes('INVALID_ARGUMENT')) {
+      console.warn(`Gemini cannot fetch URL directly, falling back to download + File API upload...`);
+      return await analysisLimit(() => analyzeVideoByDownloading(videoUrl));
+    }
+
     if (errorMessage.includes('429') || errorMessage.includes('quota')) {
       console.error(`Rate limit hit for URL analysis. Consider upgrading tier or reducing request rate.`);
     } else if (errorMessage.includes('auth') || errorMessage.includes('permission')) {
@@ -494,6 +503,99 @@ export async function analyzeVideoFromUrl(
       console.error(`URL analysis failed: ${errorMessage}`);
     }
     throw error;
+  }
+}
+
+/**
+ * Download video from URL and analyze via Gemini File API upload
+ *
+ * Fallback for when Gemini can't fetch the video URL directly (e.g. Meta CDN
+ * URLs that are auth-gated or geo-restricted).
+ */
+async function analyzeVideoByDownloading(videoUrl: string): Promise<VideoAnalysis> {
+  const { createWriteStream, createReadStream } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const { unlink, stat, readFile } = await import('fs/promises');
+  const { pipeline } = await import('stream/promises');
+
+  const tmpPath = join(tmpdir(), `gemini-download-${Date.now()}.mp4`);
+
+  try {
+    // Download video to temp file
+    console.log(`Downloading video from Meta CDN...`);
+    const response = await axios({
+      method: 'GET',
+      url: videoUrl,
+      responseType: 'stream',
+      timeout: 60000,
+      maxContentLength: 200 * 1024 * 1024,
+    });
+
+    await pipeline(response.data, createWriteStream(tmpPath));
+    const fileStat = await stat(tmpPath);
+    console.log(`Downloaded ${(fileStat.size / 1024 / 1024).toFixed(1)}MB for Gemini File API upload`);
+
+    // Upload to Gemini File API (serialized via semaphore)
+    console.log(`Uploading to Gemini File API...`);
+    const uploadResult = await uploadLimit(async () => {
+      return geminiClient!.files.upload({
+        file: new Blob([await readFile(tmpPath)]),
+        config: { mimeType: 'video/mp4' },
+      });
+    });
+
+    console.log(`Gemini file uploaded: ${uploadResult.name}, state: ${uploadResult.state}`);
+
+    // Wait for processing
+    let fileState = uploadResult;
+    while (fileState.state === 'PROCESSING') {
+      console.log('Waiting for Gemini to process video...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      fileState = await geminiClient!.files.get({ name: fileState.name! });
+    }
+
+    if (fileState.state === 'FAILED') {
+      throw new Error(`Gemini file processing failed: ${fileState.name}`);
+    }
+
+    console.log(`Gemini file ready: ${fileState.uri}`);
+
+    // Generate analysis
+    const genResponse = await geminiClient!.models.generateContent({
+      model: geminiConfig.model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              fileData: {
+                fileUri: fileState.uri!,
+                mimeType: 'video/mp4',
+              },
+            },
+            { text: ANALYSIS_PROMPT },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: geminiAnalysisSchema,
+      },
+    });
+
+    const responseText = genResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error('No response text from Gemini API');
+    }
+
+    console.log(`Received analysis response (${responseText.length} chars) via download fallback`);
+    const parsed = parseJsonResponse(responseText);
+    const validated = VideoAnalysisSchema.parse(parsed);
+    console.log(`Analysis completed via download fallback: ${validated.scenes.length} scenes, ${validated.textOverlays.length} text overlays`);
+    return validated;
+  } finally {
+    try { await unlink(tmpPath); } catch {}
   }
 }
 
