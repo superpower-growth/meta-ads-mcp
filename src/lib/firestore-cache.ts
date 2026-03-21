@@ -131,6 +131,50 @@ export async function setCached(
 }
 
 /**
+ * Get all non-expired cached analyses, indexed by adId
+ *
+ * @returns Map of adId to CacheEntry
+ */
+export async function getAllCachedByAdId(): Promise<Map<string, CacheEntry>> {
+  const results = new Map<string, CacheEntry>();
+
+  if (!firestore) {
+    return results;
+  }
+
+  try {
+    const now = new Date();
+    const nowTimestamp = Timestamp.fromDate(now);
+
+    const snapshot = await firestore
+      .collection(COLLECTION_NAME)
+      .where('expiresAt', '>', nowTimestamp)
+      .get();
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      if (!data || !data.adId) continue;
+
+      results.set(data.adId, {
+        videoId: data.videoId,
+        adId: data.adId,
+        analysisResults: data.analysisResults,
+        gcsPath: data.gcsPath,
+        expiresAt: data.expiresAt.toDate(),
+        hitCount: data.hitCount,
+        createdAt: data.createdAt.toDate(),
+        updatedAt: data.updatedAt.toDate(),
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.warn('Failed to get all cached analyses:', error instanceof Error ? error.message : error);
+    return results;
+  }
+}
+
+/**
  * Clear expired cache entries (manual cleanup)
  * Firestore TTL policy handles automatic deletion, but this can be used for immediate cleanup
  *

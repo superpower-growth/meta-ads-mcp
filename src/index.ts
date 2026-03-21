@@ -54,6 +54,7 @@ import { createAdCreative } from './tools/create-ad-creative.js';
 import { createAd } from './tools/create-ad.js';
 import { shipAdsBatch } from './tools/ship-ads-batch.js';
 import { syncCampaignsToNotion } from './tools/sync-campaigns-to-notion.js';
+import { analyzeAdThemes } from './tools/analyze-ad-themes.js';
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -249,6 +250,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'sync-campaigns-to-notion': {
         const result = await syncCampaignsToNotion();
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'analyze-ad-themes': {
+        const result = await analyzeAdThemes(args as any);
         return {
           content: [{ type: 'text', text: result }],
         };
