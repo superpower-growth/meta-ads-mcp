@@ -11,7 +11,7 @@
 
 import { z } from 'zod';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { getVideoMetadata } from '../lib/video-downloader.js';
+import { getVideoMetadata, getVideoMetadataByCreativeId } from '../lib/video-downloader.js';
 import { analyzeVideoFromUrl, estimateAnalysisCost, type VideoAnalysis } from '../lib/gemini-analyzer.js';
 import { isGeminiEnabled } from '../lib/gemini-client.js';
 import { getCached, setCached } from '../lib/firestore-cache.js';
@@ -24,6 +24,7 @@ import { env } from '../config/env.js';
  */
 export const AnalyzeVideoCreativeSchema = z.object({
   adId: z.string().describe('Meta Ad ID to analyze video creative for'),
+  creativeId: z.string().optional().describe('Optional creative ID — used as fallback if ad-level access fails (e.g. archived ads)'),
   includeMetadata: z.boolean().default(true).describe('Include video metadata (duration, thumbnail URL) in response'),
 });
 
@@ -77,20 +78,39 @@ export async function analyzeVideoCreative(input: unknown): Promise<string> {
       return JSON.stringify(response, null, 2);
     }
 
-    // Get video metadata
+    // Get video metadata (try ad ID first, fallback to creative ID)
     let metadata;
     try {
       metadata = await getVideoMetadata(args.adId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to fetch video metadata for ad ${args.adId}: ${errorMessage}`);
-      const response: AnalyzeVideoCreativeResponse = {
-        adId: args.adId,
-        videoId: null,
-        analysis: null,
-        message: `Failed to fetch video metadata: ${errorMessage}. Check if ad exists and has valid permissions.`
-      };
-      return JSON.stringify(response, null, 2);
+      console.warn(`Ad-level metadata failed for ${args.adId}: ${errorMessage}`);
+
+      // Fallback: try creative ID directly (works for archived/permission-restricted ads)
+      if (args.creativeId) {
+        console.log(`Retrying via creative ID ${args.creativeId}...`);
+        try {
+          metadata = await getVideoMetadataByCreativeId(args.creativeId);
+        } catch (fallbackError) {
+          const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          console.error(`Creative fallback also failed: ${fallbackMsg}`);
+          const response: AnalyzeVideoCreativeResponse = {
+            adId: args.adId,
+            videoId: null,
+            analysis: null,
+            message: `Failed via ad (${errorMessage}) and creative fallback (${fallbackMsg}).`
+          };
+          return JSON.stringify(response, null, 2);
+        }
+      } else {
+        const response: AnalyzeVideoCreativeResponse = {
+          adId: args.adId,
+          videoId: null,
+          analysis: null,
+          message: `Failed to fetch video metadata: ${errorMessage}. Try passing creativeId for fallback access.`
+        };
+        return JSON.stringify(response, null, 2);
+      }
     }
 
     if (!metadata) {
@@ -272,6 +292,10 @@ export const analyzeVideoCreativeTool: Tool = {
       adId: {
         type: 'string' as const,
         description: 'Meta Ad ID to analyze video creative for',
+      },
+      creativeId: {
+        type: 'string' as const,
+        description: 'Optional creative ID for fallback access when ad-level read fails (archived/restricted ads)',
       },
       includeMetadata: {
         type: 'boolean' as const,

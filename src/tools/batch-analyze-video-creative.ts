@@ -10,8 +10,18 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import pLimit from 'p-limit';
 import { analyzeVideoCreative } from './analyze-video-creative.js';
 
+const AdEntry = z.union([
+  z.string(),
+  z.object({
+    adId: z.string(),
+    creativeId: z.string().optional(),
+  }),
+]);
+
 const BatchAnalyzeSchema = z.object({
-  adIds: z.array(z.string()).min(1).max(50).describe('Array of Meta Ad IDs to analyze (1-50)'),
+  adIds: z.array(AdEntry).min(1).max(50).describe(
+    'Array of ad IDs (strings) or objects with {adId, creativeId}. Pass creativeId for ads with permission issues.'
+  ),
 });
 
 interface BatchResult {
@@ -37,8 +47,19 @@ export async function batchAnalyzeVideoCreative(input: unknown): Promise<string>
   const { adIds } = BatchAnalyzeSchema.parse(input);
   const limit = pLimit(2);
 
+  // Normalize entries to {adId, creativeId?}
+  const entries = adIds.map((entry) =>
+    typeof entry === 'string' ? { adId: entry } : entry
+  );
+
   const settled = await Promise.allSettled(
-    adIds.map((adId) => limit(() => analyzeVideoCreative({ adId, includeMetadata: true })))
+    entries.map((entry) =>
+      limit(() => analyzeVideoCreative({
+        adId: entry.adId,
+        creativeId: entry.creativeId,
+        includeMetadata: true,
+      }))
+    )
   );
 
   let succeeded = 0;
@@ -50,11 +71,11 @@ export async function batchAnalyzeVideoCreative(input: unknown): Promise<string>
       succeeded++;
       const parsed = JSON.parse(outcome.value);
       if (parsed.cacheStatus === 'hit') cached++;
-      return { adId: adIds[i], status: 'fulfilled' as const, result: parsed };
+      return { adId: entries[i].adId, status: 'fulfilled' as const, result: parsed };
     } else {
       failed++;
       return {
-        adId: adIds[i],
+        adId: entries[i].adId,
         status: 'rejected' as const,
         error: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
       };
@@ -63,7 +84,7 @@ export async function batchAnalyzeVideoCreative(input: unknown): Promise<string>
 
   const response: BatchResponse = {
     results,
-    summary: { total: adIds.length, succeeded, failed, cached },
+    summary: { total: entries.length, succeeded, failed, cached },
   };
 
   return JSON.stringify(response, null, 2);
@@ -72,16 +93,28 @@ export async function batchAnalyzeVideoCreative(input: unknown): Promise<string>
 export const batchAnalyzeVideoCreativeTool: Tool = {
   name: 'batch-analyze-video-creative',
   description:
-    'Analyze multiple video ad creatives in a single call. Processes ads in parallel (max 2 concurrent) using Gemini AI. Returns per-ad analysis results with scenes, text overlays, emotional tone, transcript, and spoken themes. Accepts 1-50 ad IDs.',
+    'Analyze multiple video ad creatives in a single call. Processes ads in parallel (max 2 concurrent) using Gemini AI. Returns per-ad analysis results with scenes, text overlays, emotional tone, transcript, and spoken themes. Accepts 1-50 entries as ad ID strings or {adId, creativeId} objects. Pass creativeId for ads with permission issues (archived/restricted).',
   inputSchema: {
     type: 'object' as const,
     properties: {
       adIds: {
         type: 'array' as const,
-        items: { type: 'string' as const },
+        items: {
+          oneOf: [
+            { type: 'string' as const, description: 'Meta Ad ID' },
+            {
+              type: 'object' as const,
+              properties: {
+                adId: { type: 'string' as const, description: 'Meta Ad ID' },
+                creativeId: { type: 'string' as const, description: 'Creative ID for fallback access' },
+              },
+              required: ['adId'],
+            },
+          ],
+        },
         minItems: 1,
         maxItems: 50,
-        description: 'Array of Meta Ad IDs to analyze',
+        description: 'Array of ad IDs (strings) or {adId, creativeId} objects',
       },
     },
     required: ['adIds'],

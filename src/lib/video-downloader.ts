@@ -163,6 +163,79 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
 }
 
 /**
+ * Get video metadata using a creative ID directly (fallback for permission errors on Ad node)
+ *
+ * @param creativeId - Meta AdCreative ID
+ * @returns Video metadata if creative has video, null if not a video creative
+ */
+export async function getVideoMetadataByCreativeId(creativeId: string): Promise<VideoMetadata | null> {
+  try {
+    FacebookAdsApi.init(env.META_ACCESS_TOKEN);
+
+    const creative = new AdCreative(creativeId);
+    const creativeData = await creative.read([
+      AdCreative.Fields.object_story_spec,
+      AdCreative.Fields.video_id,
+      'asset_feed_spec'
+    ]);
+
+    let videoId = (creativeData as any).video_id ||
+                  (creativeData as any).object_story_spec?.video_data?.video_id ||
+                  (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id;
+
+    if (!videoId) {
+      return null;
+    }
+
+    const pageId = (creativeData as any).object_story_spec?.page_id;
+
+    let videoAccessToken = env.META_ACCESS_TOKEN;
+    if (pageId) {
+      try {
+        const api = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
+        const pagesResponse = await api.call('GET', ['me', 'accounts'], {
+          fields: 'id,access_token',
+        }) as any;
+        const pages = pagesResponse?.data || pagesResponse || [];
+        const page = (Array.isArray(pages) ? pages : []).find(
+          (p: any) => String(p.id) === String(pageId)
+        );
+        if (page?.access_token) {
+          videoAccessToken = page.access_token;
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch page token for page ${pageId}, falling back to user token`);
+      }
+    }
+
+    const videoResponse = await FacebookAdsApi.init(videoAccessToken).call(
+      'GET',
+      [videoId],
+      { fields: 'source,picture,length,updated_time,permalink_url,format,thumbnails,status' }
+    ) as any;
+
+    const videoUrl = videoResponse.source ||
+                     videoResponse.permalink_url ||
+                     videoResponse.format?.find((f: any) => f.filter === 'original')?.picture ||
+                     null;
+
+    if (!videoUrl) {
+      throw new Error(`Video ${videoId} exists but has no accessible download URL via creative ${creativeId}.`);
+    }
+
+    return {
+      videoId,
+      videoUrl,
+      thumbnailUrl: videoResponse.picture || videoResponse.thumbnails?.data?.[0]?.uri || '',
+      duration: videoResponse.length as number
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get video metadata for creative ${creativeId}: ${message}`);
+  }
+}
+
+/**
  * Download video from Meta and upload to Google Cloud Storage
  *
  * Streams video directly from Meta API to GCS without disk storage.
