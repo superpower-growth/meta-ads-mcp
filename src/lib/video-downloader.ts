@@ -85,10 +85,12 @@ export async function getVideoMetadata(adId: string): Promise<VideoMetadata | nu
       'asset_feed_spec' // For dynamic creative videos
     ]);
 
-    // Extract video ID and page ID from creative
-    let videoId = (creativeData as any).video_id || // Direct field
-                  (creativeData as any).object_story_spec?.video_data?.video_id ||
-                  (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id;
+    // Extract video ID from creative
+    // Prefer object_story_spec video_id (ad account's copy) over top-level video_id
+    // (page-published video that may require pages_read_engagement to access)
+    let videoId = (creativeData as any).object_story_spec?.video_data?.video_id ||
+                  (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id ||
+                  (creativeData as any).video_id;
 
     if (!videoId) {
       console.log(`Ad ${adId} is not a video ad, skipping`);
@@ -179,9 +181,9 @@ export async function getVideoMetadataByCreativeId(creativeId: string): Promise<
       'asset_feed_spec'
     ]);
 
-    let videoId = (creativeData as any).video_id ||
-                  (creativeData as any).object_story_spec?.video_data?.video_id ||
-                  (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id;
+    let videoId = (creativeData as any).object_story_spec?.video_data?.video_id ||
+                  (creativeData as any).asset_feed_spec?.videos?.[0]?.video_id ||
+                  (creativeData as any).video_id;
 
     if (!videoId) {
       return null;
