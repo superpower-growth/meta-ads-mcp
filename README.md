@@ -110,17 +110,6 @@ Claude will automatically:
 
 ---
 
-### 📋 Onboarding Your Team
-
-Share this link with your team: [ONBOARDING.md](./ONBOARDING.md)
-
-Or send them this simple instruction:
-```
-Run: claude add https://sp-meta-ads-mcp.fly.dev/mcp
-```
-
----
-
 ## Alternative: Run Locally
 
 If you want to run your own instance (for development or customization):

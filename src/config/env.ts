@@ -111,7 +111,7 @@ const envSchema = z.object({
     .string()
     .url()
     .optional()
-    .default('https://sp-meta-ads-mcp.fly.dev/auth/google/callback'),
+    .default('http://localhost:3000/auth/google/callback'),
 
   // Pipeline Configuration (for auto-pilot ad processing)
   ANTHROPIC_API_KEY: z

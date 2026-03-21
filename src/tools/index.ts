@@ -22,18 +22,11 @@ import { getFacebookPagesTool } from './get-facebook-pages.js';
 import { listAdSetsTool } from './list-ad-sets.js';
 import { analyzeVideoUrlTool } from './analyze-video-url.js';
 import { analyzeImageUrlTool } from './analyze-image-url.js';
-import { createCampaignTool } from './create-campaign.js';
-import { createAdSetTool } from './create-ad-set.js';
-import { uploadAdVideoTool } from './upload-ad-video.js';
-import { createAdCreativeTool } from './create-ad-creative.js';
-import { createAdTool } from './create-ad.js';
-import { shipAdsBatchTool } from './ship-ads-batch.js';
-import { syncCampaignsToNotionTool } from './sync-campaigns-to-notion.js';
 import { analyzeAdThemesTool } from './analyze-ad-themes.js';
 import { listCustomConversionsTool } from './list-custom-conversions.js';
 
 /**
- * All available MCP tools (22 total)
+ * All available MCP tools (18 total)
  *
  * Consolidated tools:
  * - get-performance: replaces get-campaign-performance, get-adset-performance, get-ad-performance
@@ -61,13 +54,6 @@ export const tools: Tool[] = [
   listAdSetsTool,
   analyzeVideoUrlTool,
   analyzeImageUrlTool,
-  createCampaignTool,
-  createAdSetTool,
-  uploadAdVideoTool,
-  createAdCreativeTool,
-  createAdTool,
-  shipAdsBatchTool,
-  syncCampaignsToNotionTool,
   analyzeAdThemesTool,
   listCustomConversionsTool,
 ];

@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "meta-ads-mcp": {
+    "meta-ads": {
       "type": "url",
-      "url": "https://sp-meta-ads-mcp.fly.dev/mcp"
+      "url": "https://recime-meta-ads-mcp.fly.dev/mcp"
     },
     "n8n": {
       "type": "url",

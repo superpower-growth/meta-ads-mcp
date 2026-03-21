@@ -223,12 +223,12 @@ describe('Tool registry', () => {
   const filePath = join(toolsDir, 'index.ts');
   const content = readFileSync(filePath, 'utf-8');
 
-  it('exports exactly 22 tools', () => {
+  it('exports exactly 15 tools', () => {
     // Count the entries in the tools array
     const entries = content.match(/Tool,$/gm) || content.match(/\w+Tool[,\n]/gm) || [];
     // More reliable: count imports
     const imports = content.match(/import \{.*Tool.*\}/g) || [];
-    expect(imports.length).toBe(22);
+    expect(imports.length).toBe(18);
   });
 
   it('does not import any deleted tools', () => {

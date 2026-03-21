@@ -1,4 +1,4 @@
-app = 'sp-meta-ads-mcp'
+app = 'recime-meta-ads-mcp'
 primary_region = 'sjc'
 
 [build]

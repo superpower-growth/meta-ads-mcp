@@ -24,7 +24,6 @@ import { requireAuthForToolCall } from './middleware/auth.js';
 import { waitForReadiness } from './middleware/readiness.js';
 import authRoutes from './routes/auth.js';
 import oauthRoutes from './routes/oauth.js';
-import shipAdRouter from './routes/ship-ad.js';
 import { AccessTokenStore } from './auth/device-flow.js';
 import { storage, firestore, isGcpEnabled } from './lib/gcp-clients.js';
 import { isGeminiEnabled, geminiConfig } from './lib/gemini-client.js';
@@ -47,13 +46,6 @@ import { getFacebookPages } from './tools/get-facebook-pages.js';
 import { listAdSets } from './tools/list-ad-sets.js';
 import { analyzeVideoUrl } from './tools/analyze-video-url.js';
 import { analyzeImageUrl } from './tools/analyze-image-url.js';
-import { createCampaign } from './tools/create-campaign.js';
-import { createAdSet } from './tools/create-ad-set.js';
-import { uploadAdVideo } from './tools/upload-ad-video.js';
-import { createAdCreative } from './tools/create-ad-creative.js';
-import { createAd } from './tools/create-ad.js';
-import { shipAdsBatch } from './tools/ship-ads-batch.js';
-import { syncCampaignsToNotion } from './tools/sync-campaigns-to-notion.js';
 import { analyzeAdThemes } from './tools/analyze-ad-themes.js';
 import { listCustomConversions } from './tools/list-custom-conversions.js';
 
@@ -213,48 +205,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: result }],
         };
       }
-      case 'create-campaign': {
-        const result = await createCampaign(args as any);
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'create-ad-set': {
-        const result = await createAdSet(args as any);
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'upload-ad-video': {
-        const result = await uploadAdVideo(args as any);
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'create-ad-creative': {
-        const result = await createAdCreative(args as any);
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'create-ad': {
-        const result = await createAd(args as any);
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'ship-ads-batch': {
-        const result = await shipAdsBatch(args as any);
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
-      case 'sync-campaigns-to-notion': {
-        const result = await syncCampaignsToNotion();
-        return {
-          content: [{ type: 'text', text: result }],
-        };
-      }
       case 'analyze-ad-themes': {
         const result = await analyzeAdThemes(args as any);
         return {
@@ -378,18 +328,19 @@ async function main() {
   app.use(express.urlencoded({ extended: true })); // For OAuth token requests
   app.use(session(getSessionConfig()));
 
-  // Ship Ad REST API (n8n automation, API key auth)
-  app.use('/api', shipAdRouter);
 
   // MCP Server metadata endpoint for `claude add` compatibility
-  app.get('/mcp-metadata', (_req, res) => {
+  app.get('/mcp-metadata', (req, res) => {
+    const baseUrl = env.NODE_ENV === 'production'
+      ? `https://${req.get('host')}`
+      : `http://localhost:${env.PORT}`;
     res.json({
       name: 'meta-ads',
       displayName: 'Meta Ads Analytics',
       description: 'Access Meta Marketing API for comprehensive ad analytics',
       version: '0.1.0',
       transport: 'http',
-      url: `${env.NODE_ENV === 'production' ? 'https://sp-meta-ads-mcp.fly.dev' : 'http://localhost:3000'}/mcp`,
+      url: `${baseUrl}/mcp`,
       authentication: {
         type: 'oauth',
         provider: 'facebook',
