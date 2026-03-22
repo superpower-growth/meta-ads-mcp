@@ -5,7 +5,7 @@ A Model Context Protocol (MCP) server that provides access to Meta Marketing API
 ## Quick Start (Claude Code)
 
 ```bash
-claude mcp add --transport http meta-ads https://recime-meta-ads-mcp.fly.dev/mcp
+claude mcp add --transport http meta-ads https://sp-meta-ads-mcp.fly.dev/mcp
 ```
 
 Then ask:
@@ -23,7 +23,7 @@ Edit `~/.config/claude-code/mcp.json`:
 {
   "mcpServers": {
     "meta-ads": {
-      "url": "https://recime-meta-ads-mcp.fly.dev/mcp",
+      "url": "https://sp-meta-ads-mcp.fly.dev/mcp",
       "transport": "http"
     }
   }
@@ -89,7 +89,7 @@ Optional (for video analysis):
 ### Setup
 
 ```bash
-git clone https://github.com/team-recime/meta-ads-mcp.git
+git clone https://github.com/superpower-growth/meta-ads-mcp.git
 cd meta-ads-mcp
 cp .env.example .env
 # Edit .env with your credentials
