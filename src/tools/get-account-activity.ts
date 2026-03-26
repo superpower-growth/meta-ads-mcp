@@ -188,7 +188,7 @@ export async function getAccountActivity(args: unknown): Promise<string> {
 
     // Call Meta API activities endpoint
     const { FacebookAdsApi } = await import('facebook-nodejs-business-sdk');
-    const api = FacebookAdsApi.getDefaultApi();
+    const api = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
     const response: any = await api.call(
       'GET',
       [`${accountId}/activities`],
