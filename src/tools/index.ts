@@ -24,20 +24,50 @@ import { analyzeVideoUrlTool } from './analyze-video-url.js';
 import { analyzeImageUrlTool } from './analyze-image-url.js';
 import { analyzeAdThemesTool } from './analyze-ad-themes.js';
 import { listCustomConversionsTool } from './list-custom-conversions.js';
+import { getAccountActivityTool } from './get-account-activity.js';
+import { isForeplayEnabled } from '../lib/foreplay-client.js';
+import { foreplaySearchAdsTool } from './foreplay-search-ads.js';
+import { foreplayGetAdTool } from './foreplay-get-ad.js';
+import { foreplayFindDuplicatesTool } from './foreplay-find-duplicates.js';
+import { foreplayGetSwipefileTool } from './foreplay-get-swipefile.js';
+import { foreplayGetBoardsTool } from './foreplay-get-boards.js';
+import { foreplayGetTrackedBrandsTool } from './foreplay-get-tracked-brands.js';
+import { foreplayGetTrackedBrandAdsTool } from './foreplay-get-tracked-brand-ads.js';
 
 /**
- * All available MCP tools (18 total)
+ * Foreplay competitor research tools (conditionally included when FOREPLAY_API_KEY is set)
+ */
+const foreplayTools: Tool[] = isForeplayEnabled() ? [
+  foreplaySearchAdsTool,
+  foreplayGetAdTool,
+  foreplayFindDuplicatesTool,
+  foreplayGetSwipefileTool,
+  foreplayGetBoardsTool,
+  foreplayGetTrackedBrandsTool,
+  foreplayGetTrackedBrandAdsTool,
+] : [];
+
+/**
+ * All available MCP tools
  *
- * Consolidated tools:
+ * Meta Ads tools (18):
  * - get-performance: replaces get-campaign-performance, get-adset-performance, get-ad-performance
  * - get-video-metrics: replaces get-video-performance, get-video-engagement
  * - get-demographics: replaces get-video-demographics, get-ad-demographics, get-placement-conversions
- *
- * New tools:
  * - get-creative-fatigue: daily frequency/CTR trend analysis for fatigue detection
  * - get-creative-performance: aggregate performance by creative ID across ads
+ *
+ * Foreplay tools (7, optional):
+ * - foreplay-search-ads: search competitor ads by domain, brand ID, or page ID
+ * - foreplay-get-ad: get full details for a specific ad
+ * - foreplay-find-duplicates: find duplicate/variant creatives
+ * - foreplay-get-swipefile: get saved/bookmarked ads
+ * - foreplay-get-boards: manage boards and board ads
+ * - foreplay-get-tracked-brands: list/get Spyder tracked brands
+ * - foreplay-get-tracked-brand-ads: get ads from tracked brands
  */
 export const tools: Tool[] = [
+  getAccountActivityTool,
   getAccountTool,
   getPerformanceTool,
   getVideoMetricsTool,
@@ -56,4 +86,5 @@ export const tools: Tool[] = [
   analyzeImageUrlTool,
   analyzeAdThemesTool,
   listCustomConversionsTool,
+  ...foreplayTools,
 ];

@@ -48,6 +48,15 @@ import { analyzeVideoUrl } from './tools/analyze-video-url.js';
 import { analyzeImageUrl } from './tools/analyze-image-url.js';
 import { analyzeAdThemes } from './tools/analyze-ad-themes.js';
 import { listCustomConversions } from './tools/list-custom-conversions.js';
+import { getAccountActivity } from './tools/get-account-activity.js';
+import { initForeplayClient, isForeplayEnabled } from './lib/foreplay-client.js';
+import { foreplaySearchAds } from './tools/foreplay-search-ads.js';
+import { foreplayGetAd } from './tools/foreplay-get-ad.js';
+import { foreplayFindDuplicates } from './tools/foreplay-find-duplicates.js';
+import { foreplayGetSwipefile } from './tools/foreplay-get-swipefile.js';
+import { foreplayGetBoards } from './tools/foreplay-get-boards.js';
+import { foreplayGetTrackedBrands } from './tools/foreplay-get-tracked-brands.js';
+import { foreplayGetTrackedBrandAds } from './tools/foreplay-get-tracked-brand-ads.js';
 
 /**
  * Initialize MCP server with protocol-compliant configuration
@@ -217,6 +226,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: result }],
         };
       }
+      case 'get-activity-log': {
+        const result = await getAccountActivity(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-search-ads': {
+        const result = await foreplaySearchAds(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-get-ad': {
+        const result = await foreplayGetAd(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-find-duplicates': {
+        const result = await foreplayFindDuplicates(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-get-swipefile': {
+        const result = await foreplayGetSwipefile(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-get-boards': {
+        const result = await foreplayGetBoards(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-get-tracked-brands': {
+        const result = await foreplayGetTrackedBrands(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'foreplay-get-tracked-brand-ads': {
+        const result = await foreplayGetTrackedBrandAds(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -268,6 +325,9 @@ async function main() {
   // setInterval(() => {
   //   mcpConnectionRegistry.cleanup();
   // }, 5 * 60 * 1000);
+
+  // Initialize Foreplay client (optional - for competitor research)
+  initForeplayClient();
 
   // Auto-detect ad account ID if not provided
   if (!env.META_AD_ACCOUNT_ID) {
@@ -433,6 +493,19 @@ async function main() {
         model: geminiConfig.model,
         maxCostPerAnalysis: env.GEMINI_MAX_COST_PER_ANALYSIS,
         accessible: true // Assume accessible if client initialized
+      };
+    }
+
+    // Check Foreplay API status
+    if (!isForeplayEnabled()) {
+      healthResponse.foreplay = {
+        enabled: false,
+        reason: 'FOREPLAY_API_KEY not configured',
+      };
+    } else {
+      healthResponse.foreplay = {
+        enabled: true,
+        tools: 7,
       };
     }
 
