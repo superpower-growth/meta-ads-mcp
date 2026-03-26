@@ -127,7 +127,7 @@ function formatActivity(activity: any): any {
   const formatted: any = {
     eventType: activity.event_type,
     eventTime: activity.event_time,
-    dateTime: new Date(activity.event_time * 1000).toISOString(),
+    dateTime: activity.event_time ? new Date(Number(activity.event_time) * 1000).toISOString() : activity.event_time,
     actor: activity.actor_name || activity.actor_id || 'Unknown',
   };
 
