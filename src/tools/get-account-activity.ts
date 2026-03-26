@@ -198,7 +198,34 @@ export async function getAccountActivity(args: unknown): Promise<string> {
     }
 
     const activities = json?.data || [];
-    const formatted = activities.map(formatActivity);
+
+    // Format activities safely
+    const formatted = activities.map((activity: any) => {
+      let dateTime: string;
+      try {
+        dateTime = activity.event_time
+          ? new Date(Number(activity.event_time) * 1000).toISOString()
+          : String(activity.event_time);
+      } catch {
+        dateTime = String(activity.event_time);
+      }
+
+      const entry: any = {
+        eventType: activity.event_type,
+        eventTime: activity.event_time,
+        dateTime,
+        actor: activity.actor_name || activity.actor_id || 'Unknown',
+      };
+
+      if (activity.object_name) entry.objectName = activity.object_name;
+      if (activity.object_id) entry.objectId = activity.object_id;
+      if (activity.object_type) entry.objectType = activity.object_type;
+      if (activity.old_value !== undefined && activity.old_value !== null) entry.oldValue = activity.old_value;
+      if (activity.new_value !== undefined && activity.new_value !== null) entry.newValue = activity.new_value;
+      if (activity.extra_data) entry.extraData = activity.extra_data;
+
+      return entry;
+    });
 
     // Group by event type for summary
     const summary: Record<string, number> = {};
