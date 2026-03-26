@@ -108,8 +108,8 @@ function getCategoryEventTypes(category: string): string[] | undefined {
  * Convert date range preset to since/until timestamps
  */
 function getDateRange(preset: string): { since: string; until: string } {
-  const now = new Date();
-  const until = now.toISOString().split('T')[0];
+  const now = Math.floor(Date.now() / 1000);
+  const day = 86400;
   const daysMap: Record<string, number> = {
     last_7d: 7,
     last_14d: 14,
@@ -117,9 +117,7 @@ function getDateRange(preset: string): { since: string; until: string } {
     last_90d: 90,
   };
   const days = daysMap[preset] ?? 7;
-  const sinceDate = new Date(now.getTime() - days * 86400 * 1000);
-  const since = sinceDate.toISOString().split('T')[0];
-  return { since, until };
+  return { since: String(now - days * day), until: String(now) };
 }
 
 /**
