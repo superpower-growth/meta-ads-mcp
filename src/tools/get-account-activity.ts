@@ -182,8 +182,15 @@ export async function getAccountActivity(args: unknown): Promise<string> {
     }
 
     // Call Meta API activities endpoint via direct fetch
+    const fields = [
+      'event_type', 'event_time', 'actor_id', 'actor_name',
+      'object_id', 'object_name', 'object_type',
+      'old_value', 'new_value', 'extra_data',
+      'application_id', 'application_name',
+    ].join(',');
     const url = new URL(`https://graph.facebook.com/v21.0/${accountId}/activities`);
     url.searchParams.set('access_token', env.META_ACCESS_TOKEN);
+    url.searchParams.set('fields', fields);
     url.searchParams.set('since', since);
     url.searchParams.set('until', until);
     url.searchParams.set('limit', String(input.limit));
