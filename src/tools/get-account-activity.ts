@@ -183,16 +183,23 @@ export async function getAccountActivity(args: unknown): Promise<string> {
       params.oid = input.adsetId;
     }
 
-    // Call Meta API activities endpoint
-    const { FacebookAdsApi } = await import('facebook-nodejs-business-sdk');
-    const api = FacebookAdsApi.init(env.META_ACCESS_TOKEN);
-    const response: any = await api.call(
-      'GET',
-      [`${accountId}/activities`],
-      params,
-    );
+    // Call Meta API activities endpoint via direct fetch
+    const url = new URL(`https://graph.facebook.com/v21.0/${accountId}/activities`);
+    url.searchParams.set('access_token', env.META_ACCESS_TOKEN);
+    url.searchParams.set('since', since);
+    url.searchParams.set('until', until);
+    url.searchParams.set('limit', String(input.limit));
+    if (params.category) url.searchParams.set('category', params.category);
+    if (params.oid) url.searchParams.set('oid', params.oid);
 
-    const activities = response?.data || [];
+    const response = await fetch(url.toString());
+    const json: any = await response.json();
+
+    if (json.error) {
+      throw new Error(json.error.message || JSON.stringify(json.error));
+    }
+
+    const activities = json?.data || [];
     const formatted = activities.map(formatActivity);
 
     // Group by event type for summary
