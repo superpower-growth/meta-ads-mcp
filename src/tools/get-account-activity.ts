@@ -52,7 +52,7 @@ const GetAccountActivitySchema = z.object({
     .default('last_7d')
     .describe('Date range for activity history'),
   category: z
-    .enum(['ALL', 'BUDGET', 'STATUS', 'BID', 'TARGETING', 'CREATIVE', 'ACCOUNT', 'BILLING'])
+    .enum(['ALL', 'ACCOUNT', 'AD', 'AD_SET', 'AUDIENCE', 'BID', 'BUDGET', 'CAMPAIGN', 'DATE', 'STATUS', 'TARGETING'])
     .default('ALL')
     .describe('Filter by activity category'),
   campaignId: z
@@ -165,7 +165,6 @@ export async function getAccountActivity(args: unknown): Promise<string> {
 
   try {
     const { since, until } = getDateRange(input.dateRange);
-    const categoryTypes = getCategoryEventTypes(input.category);
 
     // Build API params
     const params: Record<string, any> = {
@@ -174,9 +173,9 @@ export async function getAccountActivity(args: unknown): Promise<string> {
       limit: input.limit,
     };
 
-    // Add category filter
-    if (categoryTypes) {
-      params.category = categoryTypes;
+    // Add category filter — Meta API expects native category strings
+    if (input.category !== 'ALL') {
+      params.category = input.category;
     }
 
     // Add object filters
@@ -239,7 +238,7 @@ export const getAccountActivityTool: Tool = {
       },
       category: {
         type: 'string' as const,
-        enum: ['ALL', 'BUDGET', 'STATUS', 'BID', 'TARGETING', 'CREATIVE', 'ACCOUNT', 'BILLING'],
+        enum: ['ALL', 'ACCOUNT', 'AD', 'AD_SET', 'AUDIENCE', 'BID', 'BUDGET', 'CAMPAIGN', 'DATE', 'STATUS', 'TARGETING'],
         default: 'ALL',
         description: 'Filter by activity category',
       },
