@@ -136,8 +136,8 @@ const envSchema = z.object({
     .positive()
     .default(3),
 
-  // Foreplay API Configuration (for competitor research)
-  FOREPLAY_API_KEY: z
+  // ScrapeCreators API Configuration (for Meta Ad Library research)
+  SCRAPECREATORS_API_KEY: z
     .string()
     .optional(),
 
@@ -194,7 +194,7 @@ const parseEnv = () => {
       NOTION_MEDIA_DB_ID: process.env.NOTION_MEDIA_DB_ID,
       PIPELINE_POLL_INTERVAL_MS: process.env.PIPELINE_POLL_INTERVAL_MS,
       PIPELINE_MAX_CONCURRENCY: process.env.PIPELINE_MAX_CONCURRENCY,
-      FOREPLAY_API_KEY: process.env.FOREPLAY_API_KEY,
+      SCRAPECREATORS_API_KEY: process.env.SCRAPECREATORS_API_KEY,
       SHIP_AD_API_KEY: process.env.SHIP_AD_API_KEY,
       DEFAULT_PAGE_ID: process.env.DEFAULT_PAGE_ID,
       DEFAULT_INSTAGRAM_ACTOR_ID: process.env.DEFAULT_INSTAGRAM_ACTOR_ID,

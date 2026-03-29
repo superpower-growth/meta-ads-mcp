@@ -25,26 +25,18 @@ import { analyzeImageUrlTool } from './analyze-image-url.js';
 import { analyzeAdThemesTool } from './analyze-ad-themes.js';
 import { listCustomConversionsTool } from './list-custom-conversions.js';
 import { getAccountActivityTool } from './get-account-activity.js';
-import { isForeplayEnabled } from '../lib/foreplay-client.js';
-import { foreplaySearchAdsTool } from './foreplay-search-ads.js';
-import { foreplayGetAdTool } from './foreplay-get-ad.js';
-import { foreplayFindDuplicatesTool } from './foreplay-find-duplicates.js';
-import { foreplayGetSwipefileTool } from './foreplay-get-swipefile.js';
-import { foreplayGetBoardsTool } from './foreplay-get-boards.js';
-import { foreplayGetTrackedBrandsTool } from './foreplay-get-tracked-brands.js';
-import { foreplayGetTrackedBrandAdsTool } from './foreplay-get-tracked-brand-ads.js';
+import { isScrapeCreatorsEnabled } from '../lib/scrapecreators-client.js';
+import { scSearchAdsTool } from './sc-search-ads.js';
+import { scGetAdTool } from './sc-get-ad.js';
+import { scSearchCompaniesTool } from './sc-search-companies.js';
 
 /**
- * Foreplay competitor research tools (conditionally included when FOREPLAY_API_KEY is set)
+ * ScrapeCreators Meta Ad Library tools (conditionally included when SCRAPECREATORS_API_KEY is set)
  */
-const foreplayTools: Tool[] = isForeplayEnabled() ? [
-  foreplaySearchAdsTool,
-  foreplayGetAdTool,
-  foreplayFindDuplicatesTool,
-  foreplayGetSwipefileTool,
-  foreplayGetBoardsTool,
-  foreplayGetTrackedBrandsTool,
-  foreplayGetTrackedBrandAdsTool,
+const scrapeCreatorsTools: Tool[] = isScrapeCreatorsEnabled() ? [
+  scSearchAdsTool,
+  scGetAdTool,
+  scSearchCompaniesTool,
 ] : [];
 
 /**
@@ -57,14 +49,10 @@ const foreplayTools: Tool[] = isForeplayEnabled() ? [
  * - get-creative-fatigue: daily frequency/CTR trend analysis for fatigue detection
  * - get-creative-performance: aggregate performance by creative ID across ads
  *
- * Foreplay tools (7, optional):
- * - foreplay-search-ads: search competitor ads by domain, brand ID, or page ID
- * - foreplay-get-ad: get full details for a specific ad
- * - foreplay-find-duplicates: find duplicate/variant creatives
- * - foreplay-get-swipefile: get saved/bookmarked ads
- * - foreplay-get-boards: manage boards and board ads
- * - foreplay-get-tracked-brands: list/get Spyder tracked brands
- * - foreplay-get-tracked-brand-ads: get ads from tracked brands
+ * ScrapeCreators tools (3, optional):
+ * - sc-search-ads: search Meta Ad Library by keyword or company name (smart routing)
+ * - sc-get-ad: get full details for a specific ad by ID or URL
+ * - sc-search-companies: search for companies/pages in the Ad Library
  */
 export const tools: Tool[] = [
   getAccountActivityTool,
@@ -86,5 +74,5 @@ export const tools: Tool[] = [
   analyzeImageUrlTool,
   analyzeAdThemesTool,
   listCustomConversionsTool,
-  ...foreplayTools,
+  ...scrapeCreatorsTools,
 ];
