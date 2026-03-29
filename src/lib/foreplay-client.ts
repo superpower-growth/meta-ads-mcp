@@ -24,7 +24,7 @@ export interface AdFilterParams {
   video_duration_max?: number;
   running_duration_min_days?: number;
   running_duration_max_days?: number;
-  cursor?: number;
+  cursor?: string;
   limit?: number;
   order?: string;
 }
@@ -92,7 +92,7 @@ export interface ForeplayBoard {
 export interface PaginatedResponse<T> {
   data: T[];
   metadata: {
-    cursor?: number;
+    cursor?: string;
     filters?: any;
     count?: number;
     order?: string;

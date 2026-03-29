@@ -18,7 +18,7 @@ const InputSchema = z.object({
   publisher_platform: z.array(z.enum(['facebook', 'instagram', 'audience_network', 'messenger'])).optional().describe('Filter by platform'),
   limit: z.number().int().min(1).max(250).optional().default(10).describe('Number of results to return'),
   offset: z.number().int().optional().default(0).describe('Pagination offset'),
-  cursor: z.number().int().optional().describe('Pagination cursor (for get_ads)'),
+  cursor: z.string().optional().describe('Pagination cursor (for get_ads)'),
   order: z.enum(['newest', 'oldest', 'longest_running', 'most_relevant']).optional().describe('Sort order (for get_ads)'),
   fetch_all: z.boolean().optional().default(false).describe('Auto-paginate to fetch ALL ads from board (ignores limit/cursor)'),
 });
@@ -126,7 +126,7 @@ export const foreplayGetBoardsTool = {
       publisher_platform: { type: 'array' as const, items: { type: 'string' as const, enum: ['facebook', 'instagram', 'audience_network', 'messenger'] }, description: 'Filter by platform' },
       limit: { type: 'integer' as const, description: 'Number of results (max 250)' },
       offset: { type: 'integer' as const, description: 'Pagination offset' },
-      cursor: { type: 'integer' as const, description: 'Pagination cursor (for get_ads)' },
+      cursor: { type: 'string' as const, description: 'Pagination cursor (for get_ads)' },
       order: { type: 'string' as const, enum: ['newest', 'oldest', 'longest_running', 'most_relevant'], description: 'Sort order' },
       fetch_all: { type: 'boolean' as const, description: 'Auto-paginate to fetch ALL ads from board (ignores limit/cursor)' },
     },

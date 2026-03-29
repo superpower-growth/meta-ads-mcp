@@ -23,7 +23,7 @@ const InputSchema = z.object({
   running_duration_min_days: z.number().int().optional().describe('Minimum days running'),
   running_duration_max_days: z.number().int().optional().describe('Maximum days running'),
   limit: z.number().int().min(1).max(250).optional().default(25).describe('Number of ads to return (max 250)'),
-  cursor: z.number().int().optional().describe('Pagination cursor from previous response'),
+  cursor: z.string().optional().describe('Pagination cursor from previous response'),
   order: z.enum(['newest', 'oldest', 'longest_running', 'most_relevant']).optional().describe('Sort order'),
   fetch_all: z.boolean().optional().default(false).describe('Auto-paginate to fetch ALL ads (ignores limit/cursor). Use when you need a complete dataset for analysis.'),
 });
@@ -101,7 +101,7 @@ export const foreplayGetTrackedBrandAdsTool = {
       running_duration_min_days: { type: 'integer' as const, description: 'Min days running' },
       running_duration_max_days: { type: 'integer' as const, description: 'Max days running' },
       limit: { type: 'integer' as const, description: 'Number of ads to return (max 250, default 25)' },
-      cursor: { type: 'integer' as const, description: 'Pagination cursor' },
+      cursor: { type: 'string' as const, description: 'Pagination cursor' },
       order: { type: 'string' as const, enum: ['newest', 'oldest', 'longest_running', 'most_relevant'], description: 'Sort order' },
       fetch_all: { type: 'boolean' as const, description: 'Auto-paginate to fetch ALL ads for complete analysis (ignores limit/cursor)' },
     },
