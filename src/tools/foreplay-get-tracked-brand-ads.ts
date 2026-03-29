@@ -51,7 +51,7 @@ export async function foreplayGetTrackedBrandAds(input: Input): Promise<string> 
   };
 
   if (fetch_all) {
-    const allAds = await client.fetchAllCursor(
+    const allAds = await client.fetchAllWindowed(
       (p) => client.getSpyderBrandAds(brand_id, p),
       filterParams,
     );

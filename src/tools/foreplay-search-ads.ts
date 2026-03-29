@@ -85,7 +85,7 @@ export async function foreplaySearchAds(input: Input): Promise<string> {
     const brandIds = brandResult.data.map(b => b.id);
 
     if (fetch_all) {
-      const allAds = await client.fetchAllCursor(
+      const allAds = await client.fetchAllWindowed(
         (p) => client.getAdsByBrandId(brandIds, p),
         filterParams,
       );
@@ -111,7 +111,7 @@ export async function foreplaySearchAds(input: Input): Promise<string> {
     const brandIds = query.split(',').map(id => id.trim());
 
     if (fetch_all) {
-      const allAds = await client.fetchAllCursor(
+      const allAds = await client.fetchAllWindowed(
         (p) => client.getAdsByBrandId(brandIds, p),
         filterParams,
       );
@@ -136,7 +136,7 @@ export async function foreplaySearchAds(input: Input): Promise<string> {
   } else {
     // page_id
     if (fetch_all) {
-      const allAds = await client.fetchAllCursor(
+      const allAds = await client.fetchAllWindowed(
         (p) => client.getAdsByPageId(query, p),
         filterParams,
       );

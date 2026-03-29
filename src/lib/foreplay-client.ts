@@ -194,28 +194,77 @@ class ForeplayClient {
   // ── Auto-pagination helpers ──
 
   /**
-   * Fetch all pages using cursor-based pagination.
-   * Works with endpoints that return { data, metadata: { cursor } }.
+   * Fetch all results using date-range windowing.
+   * Splits the time range into 30-day windows and fetches max results per window.
+   * Falls back to cursor if it works, otherwise moves to next window.
    */
-  async fetchAllCursor<T>(
+  async fetchAllWindowed<T>(
     fetcher: (params: AdFilterParams) => Promise<PaginatedResponse<T>>,
     params: AdFilterParams = {},
-    maxPages = 20,
+    windowDays = 30,
+    maxWindows = 24,
   ): Promise<T[]> {
     const allData: T[] = [];
-    let currentParams = { ...params, limit: params.limit || 250 };
-    let page = 0;
+    const seen = new Set<string>();
 
-    while (page < maxPages) {
-      const result = await fetcher(currentParams);
+    // Determine date range
+    const endDate = params.end_date ? new Date(params.end_date) : new Date();
+    const startDate = params.start_date ? new Date(params.start_date) : new Date(endDate.getTime() - windowDays * maxWindows * 24 * 60 * 60 * 1000);
+
+    let windowEnd = new Date(endDate);
+    let windowCount = 0;
+
+    while (windowEnd > startDate && windowCount < maxWindows) {
+      const windowStart = new Date(Math.max(
+        windowEnd.getTime() - windowDays * 24 * 60 * 60 * 1000,
+        startDate.getTime(),
+      ));
+
+      const windowParams: AdFilterParams = {
+        ...params,
+        start_date: windowStart.toISOString().split('T')[0],
+        end_date: windowEnd.toISOString().split('T')[0],
+        limit: 250,
+      };
+      delete windowParams.cursor;
+
+      // Fetch first page for this window
+      let result = await fetcher(windowParams);
       if (result.data?.length) {
-        allData.push(...result.data);
+        for (const item of result.data) {
+          const id = (item as any).id;
+          if (id && !seen.has(id)) {
+            seen.add(id);
+            allData.push(item);
+          }
+        }
+
+        // Try cursor pagination within this window
+        let cursorAttempts = 0;
+        while (result.metadata?.cursor && cursorAttempts < 20) {
+          try {
+            result = await fetcher({ ...windowParams, cursor: result.metadata.cursor });
+            if (!result.data?.length) break;
+            for (const item of result.data) {
+              const id = (item as any).id;
+              if (id && !seen.has(id)) {
+                seen.add(id);
+                allData.push(item);
+              }
+            }
+            cursorAttempts++;
+          } catch {
+            // Cursor failed — move on to next date window
+            break;
+          }
+        }
       }
-      if (!result.metadata?.cursor || !result.data?.length) break;
-      currentParams = { ...currentParams, cursor: result.metadata.cursor };
-      page++;
+
+      windowEnd = new Date(windowStart.getTime() - 1);
+      windowCount++;
     }
 
+    console.log(`[Foreplay] fetchAllWindowed: ${allData.length} unique items across ${windowCount} windows`);
     return allData;
   }
 

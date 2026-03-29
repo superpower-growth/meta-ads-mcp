@@ -81,7 +81,7 @@ export async function foreplayGetBoards(input: Input): Promise<string> {
   };
 
   if (fetch_all) {
-    const allAds = await client.fetchAllCursor(
+    const allAds = await client.fetchAllWindowed(
       (p) => client.getBoardAds(board_id, p),
       filterParams,
     );
