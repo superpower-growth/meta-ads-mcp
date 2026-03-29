@@ -25,6 +25,7 @@ const InputSchema = z.object({
   limit: z.number().int().min(1).max(250).optional().default(25).describe('Number of ads to return (max 250)'),
   offset: z.number().int().optional().default(0).describe('Pagination offset'),
   order: z.enum(['saved_newest', 'newest', 'oldest', 'longest_running', 'most_relevant']).optional().describe('Sort order'),
+  fetch_all: z.boolean().optional().default(false).describe('Auto-paginate to fetch ALL ads (ignores limit/offset). Use when you need a complete dataset for analysis.'),
 });
 
 type Input = z.infer<typeof InputSchema>;
@@ -47,6 +48,24 @@ export async function foreplayGetSwipefile(input: Input): Promise<string> {
   const params = validate(input);
   const client = getForeplayClient();
 
+  if (params.fetch_all) {
+    const { fetch_all, ...restParams } = params;
+    const allAds = await client.fetchAllOffset(
+      (p) => client.getSwipefileAds({ ...restParams, ...p }),
+      { offset: params.offset, limit: 250 },
+    );
+    if (!allAds.length) {
+      return 'No ads found in your swipefile matching the filters.';
+    }
+    const lines: string[] = [];
+    lines.push(`## Swipefile Ads (${allAds.length} total — all pages fetched)\n`);
+    allAds.forEach(ad => {
+      lines.push(formatAd(ad));
+      lines.push('');
+    });
+    return lines.join('\n');
+  }
+
   const result = await client.getSwipefileAds(params);
 
   if (!result.data?.length) {
@@ -62,7 +81,7 @@ export async function foreplayGetSwipefile(input: Input): Promise<string> {
   });
 
   if (result.metadata?.cursor) {
-    lines.push(`*More results available. Use offset: ${(params.offset || 0) + (params.limit || 25)} to load the next page.*`);
+    lines.push(`*More results available. Use offset: ${(params.offset || 0) + (params.limit || 25)} to load the next page, or set fetch_all: true to get everything.*`);
   }
 
   return lines.join('\n');
@@ -89,6 +108,7 @@ export const foreplayGetSwipefileTool = {
       limit: { type: 'integer' as const, description: 'Number of ads to return (max 250, default 25)' },
       offset: { type: 'integer' as const, description: 'Pagination offset' },
       order: { type: 'string' as const, enum: ['saved_newest', 'newest', 'oldest', 'longest_running', 'most_relevant'], description: 'Sort order' },
+      fetch_all: { type: 'boolean' as const, description: 'Auto-paginate to fetch ALL ads for complete analysis (ignores limit/offset)' },
     },
     required: [],
   },

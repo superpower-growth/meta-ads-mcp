@@ -190,6 +190,61 @@ class ForeplayClient {
   async getBrandsByDomain(domain: string, params: { limit?: number; order?: string } = {}): Promise<PaginatedResponse<ForeplayBrand>> {
     return this.get('/api/brand/getBrandsByDomain', { domain, ...params });
   }
+
+  // ── Auto-pagination helpers ──
+
+  /**
+   * Fetch all pages using cursor-based pagination.
+   * Works with endpoints that return { data, metadata: { cursor } }.
+   */
+  async fetchAllCursor<T>(
+    fetcher: (params: AdFilterParams) => Promise<PaginatedResponse<T>>,
+    params: AdFilterParams = {},
+    maxPages = 20,
+  ): Promise<T[]> {
+    const allData: T[] = [];
+    let currentParams = { ...params, limit: params.limit || 250 };
+    let page = 0;
+
+    while (page < maxPages) {
+      const result = await fetcher(currentParams);
+      if (result.data?.length) {
+        allData.push(...result.data);
+      }
+      if (!result.metadata?.cursor || !result.data?.length) break;
+      currentParams = { ...currentParams, cursor: result.metadata.cursor };
+      page++;
+    }
+
+    return allData;
+  }
+
+  /**
+   * Fetch all pages using offset-based pagination.
+   * Works with endpoints that use offset + limit.
+   */
+  async fetchAllOffset<T>(
+    fetcher: (params: { offset?: number; limit?: number }) => Promise<PaginatedResponse<T>>,
+    params: { offset?: number; limit?: number } = {},
+    maxPages = 20,
+  ): Promise<T[]> {
+    const allData: T[] = [];
+    const limit = params.limit || 250;
+    let offset = params.offset || 0;
+    let page = 0;
+
+    while (page < maxPages) {
+      const result = await fetcher({ ...params, offset, limit });
+      if (result.data?.length) {
+        allData.push(...result.data);
+      }
+      if (!result.data?.length || result.data.length < limit) break;
+      offset += limit;
+      page++;
+    }
+
+    return allData;
+  }
 }
 
 // ── Singleton ──────────────────────────────────────────────────────────

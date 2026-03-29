@@ -28,6 +28,7 @@ const InputSchema = z.object({
   limit: z.number().int().min(1).max(250).optional().default(25).describe('Number of ads to return (max 250)'),
   cursor: z.number().int().optional().describe('Pagination cursor from previous response'),
   order: z.enum(['newest', 'oldest', 'longest_running', 'most_relevant']).optional().describe('Sort order'),
+  fetch_all: z.boolean().optional().default(false).describe('Auto-paginate to fetch ALL ads (ignores limit/cursor). Use when you need a complete dataset for analysis.'),
 });
 
 type Input = z.infer<typeof InputSchema>;
@@ -65,7 +66,7 @@ export async function foreplaySearchAds(input: Input): Promise<string> {
   const params = validate(input);
   const client = getForeplayClient();
 
-  const { query, query_type, ...filterParams } = params;
+  const { query, query_type, fetch_all, ...filterParams } = params;
 
   const lines: string[] = [];
 
@@ -82,42 +83,80 @@ export async function foreplaySearchAds(input: Input): Promise<string> {
 
     // Step 2: Fetch ads for all found brands
     const brandIds = brandResult.data.map(b => b.id);
-    const adResult = await client.getAdsByBrandId(brandIds, filterParams);
 
-    lines.push(`## Ads (${adResult.metadata?.count ?? adResult.data?.length ?? 0} total)\n`);
-    if (adResult.data?.length) {
-      adResult.data.forEach(ad => lines.push(formatAd(ad) + '\n'));
+    if (fetch_all) {
+      const allAds = await client.fetchAllCursor(
+        (p) => client.getAdsByBrandId(brandIds, p),
+        filterParams,
+      );
+      lines.push(`## Ads (${allAds.length} total — all pages fetched)\n`);
+      if (allAds.length) {
+        allAds.forEach(ad => lines.push(formatAd(ad) + '\n'));
+      } else {
+        lines.push('No ads found matching the filters.');
+      }
     } else {
-      lines.push('No ads found matching the filters.');
-    }
-    if (adResult.metadata?.cursor) {
-      lines.push(`\n*More results available. Use cursor: ${adResult.metadata.cursor} to load the next page.*`);
+      const adResult = await client.getAdsByBrandId(brandIds, filterParams);
+      lines.push(`## Ads (${adResult.metadata?.count ?? adResult.data?.length ?? 0} total)\n`);
+      if (adResult.data?.length) {
+        adResult.data.forEach(ad => lines.push(formatAd(ad) + '\n'));
+      } else {
+        lines.push('No ads found matching the filters.');
+      }
+      if (adResult.metadata?.cursor) {
+        lines.push(`\n*More results available. Use cursor: ${adResult.metadata.cursor} to load the next page, or set fetch_all: true to get everything.*`);
+      }
     }
   } else if (query_type === 'brand_id') {
     const brandIds = query.split(',').map(id => id.trim());
-    const adResult = await client.getAdsByBrandId(brandIds, filterParams);
 
-    lines.push(`## Ads for brand ${query} (${adResult.metadata?.count ?? adResult.data?.length ?? 0} total)\n`);
-    if (adResult.data?.length) {
-      adResult.data.forEach(ad => lines.push(formatAd(ad) + '\n'));
+    if (fetch_all) {
+      const allAds = await client.fetchAllCursor(
+        (p) => client.getAdsByBrandId(brandIds, p),
+        filterParams,
+      );
+      lines.push(`## Ads for brand ${query} (${allAds.length} total — all pages fetched)\n`);
+      if (allAds.length) {
+        allAds.forEach(ad => lines.push(formatAd(ad) + '\n'));
+      } else {
+        lines.push('No ads found matching the filters.');
+      }
     } else {
-      lines.push('No ads found matching the filters.');
-    }
-    if (adResult.metadata?.cursor) {
-      lines.push(`\n*More results available. Use cursor: ${adResult.metadata.cursor} to load the next page.*`);
+      const adResult = await client.getAdsByBrandId(brandIds, filterParams);
+      lines.push(`## Ads for brand ${query} (${adResult.metadata?.count ?? adResult.data?.length ?? 0} total)\n`);
+      if (adResult.data?.length) {
+        adResult.data.forEach(ad => lines.push(formatAd(ad) + '\n'));
+      } else {
+        lines.push('No ads found matching the filters.');
+      }
+      if (adResult.metadata?.cursor) {
+        lines.push(`\n*More results available. Use cursor: ${adResult.metadata.cursor} to load the next page, or set fetch_all: true to get everything.*`);
+      }
     }
   } else {
     // page_id
-    const adResult = await client.getAdsByPageId(query, filterParams);
-
-    lines.push(`## Ads for Facebook page ${query} (${adResult.metadata?.count ?? adResult.data?.length ?? 0} total)\n`);
-    if (adResult.data?.length) {
-      adResult.data.forEach(ad => lines.push(formatAd(ad) + '\n'));
+    if (fetch_all) {
+      const allAds = await client.fetchAllCursor(
+        (p) => client.getAdsByPageId(query, p),
+        filterParams,
+      );
+      lines.push(`## Ads for Facebook page ${query} (${allAds.length} total — all pages fetched)\n`);
+      if (allAds.length) {
+        allAds.forEach(ad => lines.push(formatAd(ad) + '\n'));
+      } else {
+        lines.push('No ads found matching the filters.');
+      }
     } else {
-      lines.push('No ads found matching the filters.');
-    }
-    if (adResult.metadata?.cursor) {
-      lines.push(`\n*More results available. Use cursor: ${adResult.metadata.cursor} to load the next page.*`);
+      const adResult = await client.getAdsByPageId(query, filterParams);
+      lines.push(`## Ads for Facebook page ${query} (${adResult.metadata?.count ?? adResult.data?.length ?? 0} total)\n`);
+      if (adResult.data?.length) {
+        adResult.data.forEach(ad => lines.push(formatAd(ad) + '\n'));
+      } else {
+        lines.push('No ads found matching the filters.');
+      }
+      if (adResult.metadata?.cursor) {
+        lines.push(`\n*More results available. Use cursor: ${adResult.metadata.cursor} to load the next page, or set fetch_all: true to get everything.*`);
+      }
     }
   }
 
@@ -147,6 +186,7 @@ export const foreplaySearchAdsTool = {
       limit: { type: 'integer' as const, description: 'Number of ads to return (max 250, default 25)' },
       cursor: { type: 'integer' as const, description: 'Pagination cursor from previous response' },
       order: { type: 'string' as const, enum: ['newest', 'oldest', 'longest_running', 'most_relevant'], description: 'Sort order' },
+      fetch_all: { type: 'boolean' as const, description: 'Auto-paginate to fetch ALL ads for complete analysis (ignores limit/cursor)' },
     },
     required: ['query', 'query_type'],
   },

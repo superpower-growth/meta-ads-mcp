@@ -25,14 +25,44 @@ const InputSchema = z.object({
   limit: z.number().int().min(1).max(250).optional().default(25).describe('Number of ads to return (max 250)'),
   cursor: z.number().int().optional().describe('Pagination cursor from previous response'),
   order: z.enum(['newest', 'oldest', 'longest_running', 'most_relevant']).optional().describe('Sort order'),
+  fetch_all: z.boolean().optional().default(false).describe('Auto-paginate to fetch ALL ads (ignores limit/cursor). Use when you need a complete dataset for analysis.'),
 });
 
 type Input = z.infer<typeof InputSchema>;
 
 export async function foreplayGetTrackedBrandAds(input: Input): Promise<string> {
   const validate = createToolSchema(InputSchema);
-  const { brand_id, ...filterParams } = validate(input);
+  const { brand_id, fetch_all, ...filterParams } = validate(input);
   const client = getForeplayClient();
+
+  const formatAdEntry = (ad: any) => {
+    const adLines: string[] = [];
+    adLines.push(`**${ad.title || ad.name || 'Untitled'}** (ID: ${ad.id})`);
+    if (ad.display_format) adLines.push(`  Format: ${ad.display_format}`);
+    if (ad.live !== undefined) adLines.push(`  Status: ${ad.live ? 'Live' : 'Inactive'}`);
+    if (ad.publisher_platform?.length) adLines.push(`  Platforms: ${ad.publisher_platform.join(', ')}`);
+    if (ad.started_running) adLines.push(`  Running since: ${ad.started_running}`);
+    if (ad.running_duration) adLines.push(`  Running duration: ${ad.running_duration} days`);
+    if (ad.description) adLines.push(`  Copy: ${ad.description.substring(0, 200)}${ad.description.length > 200 ? '...' : ''}`);
+    if (ad.video) adLines.push(`  Video: ${ad.video}`);
+    if (ad.image) adLines.push(`  Image: ${ad.image}`);
+    adLines.push('');
+    return adLines.join('\n');
+  };
+
+  if (fetch_all) {
+    const allAds = await client.fetchAllCursor(
+      (p) => client.getSpyderBrandAds(brand_id, p),
+      filterParams,
+    );
+    if (!allAds.length) {
+      return `No ads found for tracked brand "${brand_id}" matching the filters.`;
+    }
+    const lines: string[] = [];
+    lines.push(`## Tracked Brand Ads (${allAds.length} total — all pages fetched)\n`);
+    allAds.forEach(ad => lines.push(formatAdEntry(ad)));
+    return lines.join('\n');
+  }
 
   const result = await client.getSpyderBrandAds(brand_id, filterParams);
 
@@ -42,22 +72,10 @@ export async function foreplayGetTrackedBrandAds(input: Input): Promise<string> 
 
   const lines: string[] = [];
   lines.push(`## Tracked Brand Ads (${result.metadata?.count ?? result.data.length} total)\n`);
-
-  result.data.forEach(ad => {
-    lines.push(`**${ad.title || ad.name || 'Untitled'}** (ID: ${ad.id})`);
-    if (ad.display_format) lines.push(`  Format: ${ad.display_format}`);
-    if (ad.live !== undefined) lines.push(`  Status: ${ad.live ? 'Live' : 'Inactive'}`);
-    if (ad.publisher_platform?.length) lines.push(`  Platforms: ${ad.publisher_platform.join(', ')}`);
-    if (ad.started_running) lines.push(`  Running since: ${ad.started_running}`);
-    if (ad.running_duration) lines.push(`  Running duration: ${ad.running_duration} days`);
-    if (ad.description) lines.push(`  Copy: ${ad.description.substring(0, 200)}${ad.description.length > 200 ? '...' : ''}`);
-    if (ad.video) lines.push(`  Video: ${ad.video}`);
-    if (ad.image) lines.push(`  Image: ${ad.image}`);
-    lines.push('');
-  });
+  result.data.forEach(ad => lines.push(formatAdEntry(ad)));
 
   if (result.metadata?.cursor) {
-    lines.push(`*More results available. Use cursor: ${result.metadata.cursor} to load the next page.*`);
+    lines.push(`*More results available. Use cursor: ${result.metadata.cursor} to load the next page, or set fetch_all: true to get everything.*`);
   }
 
   return lines.join('\n');
@@ -85,6 +103,7 @@ export const foreplayGetTrackedBrandAdsTool = {
       limit: { type: 'integer' as const, description: 'Number of ads to return (max 250, default 25)' },
       cursor: { type: 'integer' as const, description: 'Pagination cursor' },
       order: { type: 'string' as const, enum: ['newest', 'oldest', 'longest_running', 'most_relevant'], description: 'Sort order' },
+      fetch_all: { type: 'boolean' as const, description: 'Auto-paginate to fetch ALL ads for complete analysis (ignores limit/cursor)' },
     },
     required: ['brand_id'],
   },

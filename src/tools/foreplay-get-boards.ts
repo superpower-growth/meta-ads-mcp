@@ -20,6 +20,7 @@ const InputSchema = z.object({
   offset: z.number().int().optional().default(0).describe('Pagination offset'),
   cursor: z.number().int().optional().describe('Pagination cursor (for get_ads)'),
   order: z.enum(['newest', 'oldest', 'longest_running', 'most_relevant']).optional().describe('Sort order (for get_ads)'),
+  fetch_all: z.boolean().optional().default(false).describe('Auto-paginate to fetch ALL ads from board (ignores limit/cursor)'),
 });
 
 type Input = z.infer<typeof InputSchema>;
@@ -66,7 +67,33 @@ export async function foreplayGetBoards(input: Input): Promise<string> {
   }
 
   // get_ads
-  const { action, board_id, offset, ...filterParams } = params;
+  const { action, board_id, offset, fetch_all, ...filterParams } = params;
+
+  const formatAdEntry = (ad: any) => {
+    const adLines: string[] = [];
+    adLines.push(`**${ad.title || ad.name || 'Untitled'}** (ID: ${ad.id})`);
+    if (ad.brand_name || ad.brand_id) adLines.push(`  Brand: ${ad.brand_name || ad.brand_id}`);
+    if (ad.display_format) adLines.push(`  Format: ${ad.display_format}`);
+    if (ad.live !== undefined) adLines.push(`  Status: ${ad.live ? 'Live' : 'Inactive'}`);
+    if (ad.description) adLines.push(`  Copy: ${ad.description.substring(0, 150)}${ad.description.length > 150 ? '...' : ''}`);
+    adLines.push('');
+    return adLines.join('\n');
+  };
+
+  if (fetch_all) {
+    const allAds = await client.fetchAllCursor(
+      (p) => client.getBoardAds(board_id, p),
+      filterParams,
+    );
+    if (!allAds.length) {
+      return `No ads found on board "${board_id}" matching the filters.`;
+    }
+    const lines: string[] = [];
+    lines.push(`## Ads on Board ${board_id} (${allAds.length} total — all pages fetched)\n`);
+    allAds.forEach(ad => lines.push(formatAdEntry(ad)));
+    return lines.join('\n');
+  }
+
   const result = await client.getBoardAds(board_id, filterParams);
 
   if (!result.data?.length) {
@@ -75,18 +102,10 @@ export async function foreplayGetBoards(input: Input): Promise<string> {
 
   const lines: string[] = [];
   lines.push(`## Ads on Board ${board_id} (${result.metadata?.count ?? result.data.length} total)\n`);
-
-  result.data.forEach(ad => {
-    lines.push(`**${ad.title || ad.name || 'Untitled'}** (ID: ${ad.id})`);
-    if (ad.brand_name || ad.brand_id) lines.push(`  Brand: ${ad.brand_name || ad.brand_id}`);
-    if (ad.display_format) lines.push(`  Format: ${ad.display_format}`);
-    if (ad.live !== undefined) lines.push(`  Status: ${ad.live ? 'Live' : 'Inactive'}`);
-    if (ad.description) lines.push(`  Copy: ${ad.description.substring(0, 150)}${ad.description.length > 150 ? '...' : ''}`);
-    lines.push('');
-  });
+  result.data.forEach(ad => lines.push(formatAdEntry(ad)));
 
   if (result.metadata?.cursor) {
-    lines.push(`*More results available. Use cursor: ${result.metadata.cursor} to load the next page.*`);
+    lines.push(`*More results available. Use cursor: ${result.metadata.cursor} to load the next page, or set fetch_all: true to get everything.*`);
   }
 
   return lines.join('\n');
@@ -109,6 +128,7 @@ export const foreplayGetBoardsTool = {
       offset: { type: 'integer' as const, description: 'Pagination offset' },
       cursor: { type: 'integer' as const, description: 'Pagination cursor (for get_ads)' },
       order: { type: 'string' as const, enum: ['newest', 'oldest', 'longest_running', 'most_relevant'], description: 'Sort order' },
+      fetch_all: { type: 'boolean' as const, description: 'Auto-paginate to fetch ALL ads from board (ignores limit/cursor)' },
     },
     required: ['action'],
   },
