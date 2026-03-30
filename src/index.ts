@@ -49,6 +49,8 @@ import { analyzeImageUrl } from './tools/analyze-image-url.js';
 import { analyzeAdThemes } from './tools/analyze-ad-themes.js';
 import { listCustomConversions } from './tools/list-custom-conversions.js';
 import { getAccountActivity } from './tools/get-account-activity.js';
+import { getCampaignConfig } from './tools/get-campaign-config.js';
+import { getAudienceOverlap } from './tools/get-audience-overlap.js';
 import { initScrapeCreatorsClient, isScrapeCreatorsEnabled } from './lib/scrapecreators-client.js';
 import { scSearchAds } from './tools/sc-search-ads.js';
 import { scGetAd } from './tools/sc-get-ad.js';
@@ -224,6 +226,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'get-activity-log': {
         const result = await getAccountActivity(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'get-campaign-config': {
+        const result = await getCampaignConfig(args as any);
+        return {
+          content: [{ type: 'text', text: result }],
+        };
+      }
+      case 'get-audience-overlap': {
+        const result = await getAudienceOverlap(args as any);
         return {
           content: [{ type: 'text', text: result }],
         };

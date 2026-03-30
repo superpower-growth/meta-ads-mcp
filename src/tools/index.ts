@@ -25,6 +25,8 @@ import { analyzeImageUrlTool } from './analyze-image-url.js';
 import { analyzeAdThemesTool } from './analyze-ad-themes.js';
 import { listCustomConversionsTool } from './list-custom-conversions.js';
 import { getAccountActivityTool } from './get-account-activity.js';
+import { getCampaignConfigTool } from './get-campaign-config.js';
+import { getAudienceOverlapTool } from './get-audience-overlap.js';
 import { isScrapeCreatorsEnabled } from '../lib/scrapecreators-client.js';
 import { scSearchAdsTool } from './sc-search-ads.js';
 import { scGetAdTool } from './sc-get-ad.js';
@@ -74,5 +76,7 @@ export const tools: Tool[] = [
   analyzeImageUrlTool,
   analyzeAdThemesTool,
   listCustomConversionsTool,
+  getCampaignConfigTool,
+  getAudienceOverlapTool,
   ...scrapeCreatorsTools,
 ];
